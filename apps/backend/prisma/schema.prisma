@@ -1,0 +1,77 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Tenant {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name        String
+  slug        String    @unique
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  
+  users       User[]
+  products    Product[]
+  orders      Order[]
+
+  @@map("tenants")
+}
+
+model User {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email       String   @unique
+  tenantId    String?  @map("tenant_id") @db.Uuid
+  tenant      Tenant?  @relation(fields: [tenantId], references: [id])
+  role        String   @default("OWNER") // OWNER, STAFF
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("users")
+}
+
+model Product {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  name        String
+  description String?
+  price       Decimal  @db.Decimal(10, 2)
+  stockCount  Int      @default(0) @map("stock_count")
+  imageUrl    String?  @map("image_url")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  orderItems  OrderItem[]
+
+  @@map("products")
+}
+
+model Order {
+  id               String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId         String       @map("tenant_id") @db.Uuid
+  tenant           Tenant       @relation(fields: [tenantId], references: [id])
+  customerName     String       @map("customer_name")
+  customerWhatsapp String       @map("customer_whatsapp")
+  status           String       @default("PENDING") // PENDING, CONFIRMED, DELIVERED, CANCELLED
+  totalAmount      Decimal      @db.Decimal(10, 2) @map("total_amount")
+  createdAt        DateTime     @default(now()) @map("created_at")
+  updatedAt        DateTime     @updatedAt @map("updated_at")
+
+  items            OrderItem[]
+
+  @@map("orders")
+}
+
+model OrderItem {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orderId     String   @map("order_id") @db.Uuid
+  order       Order    @relation(fields: [orderId], references: [id])
+  productId   String   @map("product_id") @db.Uuid
+  product     Product  @relation(fields: [productId], references: [id])
+  quantity    Int
+  priceAtTime Decimal  @db.Decimal(10, 2) @map("price_at_time")
+
+  @@map("order_items")
+}
