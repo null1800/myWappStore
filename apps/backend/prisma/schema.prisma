@@ -1,81 +1,241 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
+// learn more about Prisma schema: https://pris.ly/d/prisma-schema
 
 generator client {
   provider = "prisma-client-js"
 }
+
 datasource db {
   provider = "postgresql"
 }
 
-
+// ─────────────────────────────────────────────────────────────────────────────
+// TENANTS — root of all data ownership. One row per business.
+// ─────────────────────────────────────────────────────────────────────────────
 model Tenant {
-  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  name        String
-  slug        String    @unique
-  createdAt   DateTime  @default(now()) @map("created_at")
-  updatedAt   DateTime  @updatedAt @map("updated_at")
-  
-  users       User[]
-  products    Product[]
-  orders      Order[]
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  slug           String   @unique // mywappstore.com/[slug]
+  name           String
+  email          String   @unique
+  phoneWhatsapp  String?  @map("phone_whatsapp") // wa.me number
+  logoUrl        String?  @map("logo_url")
+  bannerUrl      String?  @map("banner_url")
+  primaryColor   String   @default("#0F6E56") @map("primary_color")
+  description    String?
+  isActive       Boolean  @default(true) @map("is_active")
+  isPublic       Boolean  @default(true) @map("is_public") // marketplace visibility
+  plan           String   @default("free") // free | starter | pro
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  users          User[]
+  categories     Category[]
+  products       Product[]
+  customers      Customer[]
+  orders         Order[]
+  inventoryLogs  InventoryLog[]
 
   @@map("tenants")
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// USERS — merchant accounts and staff. Links to Supabase Auth via authId.
+// ─────────────────────────────────────────────────────────────────────────────
 model User {
-  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  email       String   @unique
-  tenantId    String?  @map("tenant_id") @db.Uuid
-  tenant      Tenant?  @relation(fields: [tenantId], references: [id])
-  role        String   @default("OWNER") // OWNER, STAFF
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  authId    String   @unique @map("auth_id") @db.Uuid // references Supabase auth.users(id)
+  tenantId  String?  @map("tenant_id") @db.Uuid
+  tenant    Tenant?  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  email     String
+  fullName  String?  @map("full_name")
+  role      UserRole @default(OWNER)
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  inventoryLogs InventoryLog[]
 
   @@map("users")
 }
 
-model Product {
+enum UserRole {
+  SUPER_ADMIN
+  OWNER
+  STAFF
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CATEGORIES — product categories scoped per tenant
+// ─────────────────────────────────────────────────────────────────────────────
+model Category {
   id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   tenantId    String   @map("tenant_id") @db.Uuid
-  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   name        String
+  slug        String
   description String?
-  price       Decimal  @db.Decimal(10, 2)
-  stockCount  Int      @default(0) @map("stock_count")
   imageUrl    String?  @map("image_url")
+  sortOrder   Int      @default(0) @map("sort_order")
+  isActive    Boolean  @default(true) @map("is_active")
   createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
 
-  orderItems  OrderItem[]
+  products    Product[]
 
+  @@unique([tenantId, slug])
+  @@index([tenantId, isActive])
+  @@map("categories")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PRODUCTS — core catalogue entity
+// ─────────────────────────────────────────────────────────────────────────────
+model Product {
+  id               String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId         String        @map("tenant_id") @db.Uuid
+  tenant           Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  categoryId       String?       @map("category_id") @db.Uuid
+  category         Category?     @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  name             String
+  slug             String
+  description      String?
+  price            Decimal       @db.Decimal(12, 2)
+  compareAtPrice   Decimal?      @map("compare_at_price") @db.Decimal(12, 2) // "was" price
+  sku              String?
+  stockQuantity    Int           @default(0) @map("stock_quantity")
+  trackInventory   Boolean       @default(true) @map("track_inventory")
+  allowBackorder   Boolean       @default(false) @map("allow_backorder")
+  status           ProductStatus @default(ACTIVE)
+  images           String[]      // array of Supabase Storage URLs
+  tags             String[]
+  weightGrams      Int?          @map("weight_grams")
+  metaTitle        String?       @map("meta_title")
+  metaDescription  String?       @map("meta_description")
+  createdAt        DateTime      @default(now()) @map("created_at")
+  updatedAt        DateTime      @updatedAt @map("updated_at")
+
+  orderItems     OrderItem[]
+  inventoryLogs  InventoryLog[]
+
+  @@unique([tenantId, slug])
+  @@index([tenantId, status]) // storefront listing — most frequent query
   @@map("products")
 }
 
+enum ProductStatus {
+  ACTIVE
+  DRAFT
+  ARCHIVED
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CUSTOMERS — people who place orders, scoped per tenant
+// ─────────────────────────────────────────────────────────────────────────────
+model Customer {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId        String   @map("tenant_id") @db.Uuid
+  tenant          Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  email           String?
+  fullName        String?  @map("full_name")
+  phone           String?
+  whatsappNumber  String?  @map("whatsapp_number")
+  deliveryAddress String?  @map("delivery_address")
+  notes           String?  // merchant notes on customer
+  totalOrders     Int      @default(0) @map("total_orders")
+  totalSpent      Decimal  @default(0) @map("total_spent") @db.Decimal(14, 2)
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  orders Order[]
+
+  @@index([tenantId, email])
+  @@map("customers")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ORDERS — order header. Line items are in OrderItem.
+// ─────────────────────────────────────────────────────────────────────────────
 model Order {
-  id               String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId         String       @map("tenant_id") @db.Uuid
-  tenant           Tenant       @relation(fields: [tenantId], references: [id])
-  customerName     String       @map("customer_name")
-  customerWhatsapp String       @map("customer_whatsapp")
-  status           String       @default("PENDING") // PENDING, CONFIRMED, DELIVERED, CANCELLED
-  totalAmount      Decimal      @db.Decimal(10, 2) @map("total_amount")
-  createdAt        DateTime     @default(now()) @map("created_at")
-  updatedAt        DateTime     @updatedAt @map("updated_at")
+  id              String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId        String        @map("tenant_id") @db.Uuid
+  tenant          Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customerId      String?       @map("customer_id") @db.Uuid
+  customer        Customer?     @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  orderNumber     String        @map("order_number") // human-readable e.g. ORD-00042
+  status          OrderStatus   @default(PENDING)
+  subtotal        Decimal       @db.Decimal(14, 2)
+  discountAmount  Decimal       @default(0) @map("discount_amount") @db.Decimal(14, 2)
+  total           Decimal       @db.Decimal(14, 2)
+  currency        String        @default("ZMW")
+  paymentMethod   String?       @map("payment_method") // whatsapp | mobile_money | cash
+  paymentStatus   PaymentStatus @default(UNPAID) @map("payment_status")
+  deliveryAddress String?       @map("delivery_address")
+  notes           String?       // customer notes
+  merchantNotes   String?       @map("merchant_notes")
+  whatsappSentAt  DateTime?     @map("whatsapp_sent_at")
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
 
-  items            OrderItem[]
+  items OrderItem[]
 
+  @@unique([tenantId, orderNumber])
+  @@index([tenantId, status, createdAt]) // dashboard order list
+  @@index([tenantId, customerId])        // customer order history
   @@map("orders")
 }
 
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  PACKED
+  DISPATCHED
+  DELIVERED
+  CANCELLED
+  REFUNDED
+}
+
+enum PaymentStatus {
+  UNPAID
+  PAID
+  PARTIALLY_PAID
+  REFUNDED
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ORDER ITEMS — line items. Prices snapshotted at time of order.
+// ─────────────────────────────────────────────────────────────────────────────
 model OrderItem {
   id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   orderId     String   @map("order_id") @db.Uuid
-  order       Order    @relation(fields: [orderId], references: [id])
-  productId   String   @map("product_id") @db.Uuid
-  product     Product  @relation(fields: [productId], references: [id])
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId   String?  @map("product_id") @db.Uuid
+  product     Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  productName String   @map("product_name") // snapshot — never changes
+  productSku  String?  @map("product_sku")
+  unitPrice   Decimal  @map("unit_price") @db.Decimal(12, 2) // snapshot
   quantity    Int
-  priceAtTime Decimal  @db.Decimal(10, 2) @map("price_at_time")
+  lineTotal   Decimal  @map("line_total") @db.Decimal(14, 2)
 
   @@map("order_items")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// INVENTORY LOG — append-only audit trail of all stock changes
+// RULE: never UPDATE rows here. Only INSERT.
+// ─────────────────────────────────────────────────────────────────────────────
+model InventoryLog {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  productId   String   @map("product_id") @db.Uuid
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  tenantId    String   @map("tenant_id") @db.Uuid
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  changeQty   Int      @map("change_qty") // positive = stock in, negative = stock out
+  reason      String   // order | restock | adjustment | return
+  referenceId String?  @map("reference_id") @db.Uuid // order_id if reason = order
+  note        String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  createdById String?  @map("created_by_id") @db.Uuid
+  createdBy   User?    @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([productId, createdAt]) // inventory history timeline
+  @@index([tenantId, createdAt])
+  @@map("inventory_logs")
 }
