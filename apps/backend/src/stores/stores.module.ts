@@ -1,6 +1,10 @@
 import { Module } from '@nestjs/common';
+import { StoresController } from './stores.controller';
+import { StoresService } from './stores.service';
 
-// TODO: Implement in Step 4 (auth) / Step 5+ (other modules)
-// This stub allows AppModule to compile immediately.
-@Module({})
+@Module({
+  controllers: [StoresController],
+  providers: [StoresService],
+  exports: [StoresService], // exported so ProductsModule can resolve tenant by slug
+})
 export class StoresModule {}

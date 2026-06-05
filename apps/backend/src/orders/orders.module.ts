@@ -1,6 +1,17 @@
 import { Module } from '@nestjs/common';
+import { OrdersController } from './orders.controller';
+import { OrdersService } from './orders.service';
+import { WhatsAppService } from './whatsapp.service';
+import { CustomersModule } from '../customers/customers.module';
+import { ProductsModule } from '../products/products.module';
 
-// TODO: Implement in Step 4 (auth) / Step 5+ (other modules)
-// This stub allows AppModule to compile immediately.
-@Module({})
+@Module({
+  imports: [
+    CustomersModule, // for CustomerService — auto-create customers on checkout
+    ProductsModule,  // for InventoryService — deduct stock on order creation
+  ],
+  controllers: [OrdersController],
+  providers: [OrdersService, WhatsAppService],
+  exports: [OrdersService],
+})
 export class OrdersModule {}

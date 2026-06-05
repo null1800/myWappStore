@@ -1,6 +1,10 @@
 import { Module } from '@nestjs/common';
+import { CustomersController } from './customers.controller';
+import { CustomersService } from './customers.service';
 
-// TODO: Implement in Step 4 (auth) / Step 5+ (other modules)
-// This stub allows AppModule to compile immediately.
-@Module({})
+@Module({
+  controllers: [CustomersController],
+  providers: [CustomersService],
+  exports: [CustomersService], // exported so OrdersModule can use findOrCreate
+})
 export class CustomersModule {}

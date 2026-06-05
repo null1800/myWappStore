@@ -1,6 +1,13 @@
 import { Module } from '@nestjs/common';
+import { ProductsController } from './products.controller';
+import { ProductsService } from './products.service';
+import { CategoriesController } from './categories.controller';
+import { CategoriesService } from './categories.service';
+import { InventoryService } from './inventory.service';
 
-// TODO: Implement in Step 4 (auth) / Step 5+ (other modules)
-// This stub allows AppModule to compile immediately.
-@Module({})
+@Module({
+  controllers: [ProductsController, CategoriesController],
+  providers: [ProductsService, CategoriesService, InventoryService],
+  exports: [ProductsService, InventoryService],
+})
 export class ProductsModule {}

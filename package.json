@@ -1,6 +1,7 @@
 {
   "name": "my-wapp-store",
   "private": true,
+  "packageManager": "npm@9.8.0",
   "workspaces": [
     "apps/*",
     "packages/*"
