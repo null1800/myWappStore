@@ -31,7 +31,7 @@ export class AuthService {
   ) {
     // Initialize Supabase admin client here using injected ConfigService
     this.supabaseAdmin = createClient(
-      this.config.getOrThrow('SUPABASE_URL'),
+      this.config.getOrThrow('NEXT_PUBLIC_SUPABASE_URL'),
       this.config.getOrThrow('SUPABASE_SERVICE_ROLE_KEY'),
       {
         auth: {
