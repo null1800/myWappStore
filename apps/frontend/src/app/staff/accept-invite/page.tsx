@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Store, Eye, EyeOff, Loader2, CheckCircle, XCircle } from 'lucide-react';
@@ -9,7 +9,7 @@ import { toast } from 'sonner';
 
 type PageState = 'loading' | 'ready' | 'submitting' | 'done' | 'invalid';
 
-export default function AcceptInvitePage() {
+function AcceptInviteContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const [state, setState] = useState<PageState>('loading');
@@ -152,5 +152,17 @@ export default function AcceptInvitePage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function AcceptInvitePage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-[var(--background)]">
+        <Loader2 className="w-6 h-6 animate-spin text-[var(--brand)]" />
+      </div>
+    }>
+      <AcceptInviteContent />
+    </Suspense>
   );
 }

@@ -1,12 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { CheckCircle, XCircle, Loader2 } from 'lucide-react';
 import { api } from '@/lib/api';
 
-export default function BillingVerifyPage() {
+function BillingVerifyContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const [state, setState] = useState<'verifying' | 'success' | 'failed'>('verifying');
@@ -65,5 +65,17 @@ export default function BillingVerifyPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function BillingVerifyPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-[var(--background)]">
+        <Loader2 className="w-6 h-6 animate-spin text-[var(--brand)]" />
+      </div>
+    }>
+      <BillingVerifyContent />
+    </Suspense>
   );
 }
