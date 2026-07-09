@@ -15,6 +15,9 @@ interface StoreInfo {
   bannerUrl: string | null;
   primaryColor: string;
   phoneWhatsapp: string | null;
+  isPublic: boolean;
+  isActive: boolean;
+  businessType: string;
 }
 
 interface Product {
@@ -30,6 +33,13 @@ interface Product {
   status: string;
   category: { id: string; name: string } | null;
 }
+
+// Revalidate storefront pages every 60 seconds (ISR).
+// Public store data (name, branding, products) changes infrequently — no
+// reason to hit the backend API on every storefront visit. A 60-second
+// cache window means a product update is visible within a minute, while
+// the vast majority of visits are served from the cache.
+export const revalidate = 60;
 
 async function getStoreData(slug: string) {
   try {
@@ -60,6 +70,22 @@ export default async function StorefrontPage({
   if (!result) notFound();
 
   const { store, products } = result;
+
+  // Inactive stores get a polite "closed" page — not a 404 — so the
+  // merchant can see it and customers get a clear message
+  if (!store.isActive) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[var(--background)]">
+        <div className="text-center px-4 max-w-sm">
+          <p className="text-4xl mb-4">🔒</p>
+          <h1 className="text-xl font-bold text-[var(--text-primary)]">{store.name} is temporarily closed</h1>
+          <p className="text-[var(--text-secondary)] mt-2 text-sm">
+            This store is not currently accepting orders. Please check back later.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   // Get unique categories from active products
   const categories = Array.from(

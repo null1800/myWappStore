@@ -13,12 +13,15 @@ import {
   ParseUUIDPipe,
 } from '@nestjs/common';
 import { ProductsService } from './products.service';
+import { ProductVariantsService } from './product-variants.service';
 import {
   CreateProductDto,
   UpdateProductDto,
   AdjustStockDto,
   ProductQueryDto,
 } from './dto/product.dto';
+import { UpdateImagesDto } from './dto/update-images.dto';
+import { CreateVariantDto, UpdateVariantDto } from './dto/variants/variant.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -28,7 +31,10 @@ import { Tenant, type TenantContext } from '../common/decorators/tenant.decorato
 @Controller({ path: 'products', version: '1' })
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class ProductsController {
-  constructor(private readonly productsService: ProductsService) {}
+  constructor(
+    private readonly productsService: ProductsService,
+    private readonly variantsService: ProductVariantsService,
+  ) {}
 
   // POST /api/v1/products
   @Post()
@@ -108,13 +114,70 @@ export class ProductsController {
   }
 
   // PATCH /api/v1/products/:id/images
-  // Called after frontend uploads images directly to Supabase Storage
+  // Called after frontend uploads images directly to Supabase Storage.
+  // URLs are validated to prevent XSS via javascript:/data: URI injection.
   @Patch(':id/images')
   updateImages(
     @Tenant() tenant: TenantContext,
     @Param('id', ParseUUIDPipe) id: string,
-    @Body('images') images: string[],
+    @Body() dto: UpdateImagesDto,
   ) {
-    return this.productsService.updateImages(tenant.id, id, images);
+    return this.productsService.updateImages(tenant.id, id, dto.images);
+  }
+
+  // ── Variant routes: /api/v1/products/:id/variants ─────────────────────────
+
+  // GET /api/v1/products/:id/variants
+  @Get(':id/variants')
+  listVariants(
+    @Tenant() tenant: TenantContext,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.variantsService.findAll(tenant.id, id);
+  }
+
+  // POST /api/v1/products/:id/variants
+  @Post(':id/variants')
+  @HttpCode(HttpStatus.CREATED)
+  createVariant(
+    @Tenant() tenant: TenantContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CreateVariantDto,
+  ) {
+    return this.variantsService.create(tenant.id, id, dto);
+  }
+
+  // PATCH /api/v1/products/:id/variants/:variantId
+  @Patch(':id/variants/:variantId')
+  updateVariant(
+    @Tenant() tenant: TenantContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('variantId', ParseUUIDPipe) variantId: string,
+    @Body() dto: UpdateVariantDto,
+  ) {
+    return this.variantsService.update(tenant.id, id, variantId, dto);
+  }
+
+  // DELETE /api/v1/products/:id/variants/:variantId
+  @Delete(':id/variants/:variantId')
+  @HttpCode(HttpStatus.OK)
+  removeVariant(
+    @Tenant() tenant: TenantContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('variantId', ParseUUIDPipe) variantId: string,
+  ) {
+    return this.variantsService.remove(tenant.id, id, variantId);
+  }
+
+  // PATCH /api/v1/products/:id/variants/:variantId/stock
+  @Patch(':id/variants/:variantId/stock')
+  adjustVariantStock(
+    @Tenant() tenant: TenantContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('variantId', ParseUUIDPipe) variantId: string,
+    @Body() body: { type: 'set' | 'increment' | 'decrement'; quantity: number; note?: string },
+  ) {
+    return this.variantsService.adjustStock(tenant.id, id, variantId, body);
   }
 }
+

@@ -21,6 +21,7 @@
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
+    "db:migrate:deploy": "prisma migrate deploy",
     "db:status": "prisma migrate status",
     "db:rls": "prisma db execute --file prisma/rls-policies.sql",
     "supabase:check": "node scripts/check-supabase-cli.mjs"
@@ -43,6 +44,7 @@
     "passport-jwt": "^4.0.1",
     "redis": "^6.0.0",
     "reflect-metadata": "^0.2.2",
+    "resend": "^6.14.0",
     "rxjs": "^7.8.1"
   },
   "devDependencies": {

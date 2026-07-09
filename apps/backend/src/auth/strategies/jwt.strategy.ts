@@ -14,14 +14,13 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
     private readonly authService: AuthService,
   ) {
     super({
-      // Extract JWT from Authorization: Bearer <token> header
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
-
-      // Reject expired tokens (do not ignore expiry)
       ignoreExpiration: false,
-
-      // Must match the secret used to sign tokens in AuthService
       secretOrKey: config.getOrThrow<string>('JWT_SECRET'),
+      // Explicitly pin to HS256. Without this, passport-jwt accepts the
+      // algorithm declared in the token header itself — an attacker who can
+      // set alg:'none' could forge tokens without a signature.
+      algorithms: ['HS256'],
     });
   }
 
@@ -42,12 +41,16 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
       throw new UnauthorizedException('Session is no longer valid. Please log in again.');
     }
 
-    // Return value is attached to request.user — available in all guards and decorators
+    // Return value is attached to request.user — available in all guards and decorators.
+    // IMPORTANT: use the freshly-fetched tenantId/role, not payload.tenantId/payload.role.
+    // We already pay for this DB call to catch deactivated accounts immediately —
+    // using the JWT's own (possibly stale) claims here would mean a role change
+    // or tenant reassignment silently wouldn't take effect until the token expires.
     return {
-      sub: payload.sub,
-      tenantId: payload.tenantId,
-      role: payload.role,
-      email: payload.email,
+      sub: user.id,
+      tenantId: user.tenantId,
+      role: user.role,
+      email: user.email,
     };
   }
 }

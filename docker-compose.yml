@@ -1,0 +1,54 @@
+# MyWAppStore — local/staging orchestration
+#
+# The database is Supabase-hosted Postgres, not a container here — both
+# services read their DB connection strings from env files. Copy the
+# .env.example files first:
+#   cp apps/backend/.env.example apps/backend/.env
+#   cp apps/frontend/.env.example apps/frontend/.env
+# then fill in real values before running `docker compose up --build`.
+#
+# Migrations are NOT run automatically on container start (see backend
+# Dockerfile). Run them deliberately, once:
+#   docker compose run --rm backend npm run db:migrate:deploy -w @my-wapp-store/backend
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: apps/backend/Dockerfile
+    env_file:
+      - apps/backend/.env
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+    ports:
+      - "3001:3001"
+    healthcheck:
+      # /health/ready checks DB connectivity, not just process liveness
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3001/api/v1/health/ready', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 25s
+    restart: unless-stopped
+    networks:
+      - mywappstore
+
+  frontend:
+    build:
+      context: .
+      dockerfile: apps/frontend/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3001/api/v1}
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - mywappstore
+
+networks:
+  mywappstore:
+    driver: bridge

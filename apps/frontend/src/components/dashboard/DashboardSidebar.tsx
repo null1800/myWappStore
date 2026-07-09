@@ -12,17 +12,22 @@ import {
   Store,
   Menu,
   X,
+  BarChart2,
+  UserCog,
+  CreditCard,
 } from 'lucide-react';
 import { useState } from 'react';
 import { useAuthStore } from '@/store/auth.store';
 import { api } from '@/lib/api';
 
 const NAV_ITEMS = [
-  { href: '/dashboard',          label: 'Overview',  icon: LayoutDashboard },
-  { href: '/dashboard/products', label: 'Products',  icon: Package },
-  { href: '/dashboard/orders',   label: 'Orders',    icon: ShoppingCart },
-  { href: '/dashboard/customers',label: 'Customers', icon: Users },
-  { href: '/dashboard/store',    label: 'My Store',  icon: Settings },
+  { href: '/dashboard',           label: 'Overview',  icon: LayoutDashboard, ownerOnly: false },
+  { href: '/dashboard/products',  label: 'Products',  icon: Package,         ownerOnly: false },
+  { href: '/dashboard/orders',    label: 'Orders',    icon: ShoppingCart,    ownerOnly: false },
+  { href: '/dashboard/customers', label: 'Customers', icon: Users,           ownerOnly: false },
+  { href: '/dashboard/reports',   label: 'Reports',   icon: BarChart2,       ownerOnly: true  },
+  { href: '/dashboard/staff',     label: 'Staff',     icon: UserCog,         ownerOnly: true  },
+  { href: '/dashboard/store',     label: 'My Store',  icon: Settings,        ownerOnly: false },
 ];
 
 export function DashboardSidebar() {
@@ -41,27 +46,29 @@ export function DashboardSidebar() {
 
   const NavLinks = () => (
     <nav className="flex-1 px-3 py-4 space-y-1">
-      {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
-        const isActive =
-          href === '/dashboard'
-            ? pathname === '/dashboard'
-            : pathname.startsWith(href);
-        return (
-          <Link
-            key={href}
-            href={href}
-            onClick={() => setMobileOpen(false)}
-            className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 ${
-              isActive
-                ? 'bg-[var(--brand)] text-white shadow-sm'
-                : 'text-[var(--text-secondary)] hover:bg-[var(--surface-2)] hover:text-[var(--text-primary)]'
-            }`}
-          >
-            <Icon className="w-4 h-4 shrink-0" />
-            {label}
-          </Link>
-        );
-      })}
+      {NAV_ITEMS
+        .filter(({ ownerOnly }) => !ownerOnly || user?.role === 'OWNER')
+        .map(({ href, label, icon: Icon }) => {
+          const isActive =
+            href === '/dashboard'
+              ? pathname === '/dashboard'
+              : pathname.startsWith(href);
+          return (
+            <Link
+              key={href}
+              href={href}
+              onClick={() => setMobileOpen(false)}
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 ${
+                isActive
+                  ? 'bg-[var(--brand)] text-white shadow-sm'
+                  : 'text-[var(--text-secondary)] hover:bg-[var(--surface-2)] hover:text-[var(--text-primary)]'
+              }`}
+            >
+              <Icon className="w-4 h-4 shrink-0" />
+              {label}
+            </Link>
+          );
+        })}
     </nav>
   );
 

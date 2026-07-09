@@ -1,11 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
-import { Search, ShoppingCart, Filter } from 'lucide-react';
+import { Search, ShoppingCart } from 'lucide-react';
 import { api } from '@/lib/api';
 import { formatCurrency, formatDateTime, ORDER_STATUS_BADGE, ORDER_STATUS_LABELS, PAYMENT_STATUS_BADGE } from '@/lib/utils';
-import { Spinner } from '@/components/ui/Spinner';
+import { TableSkeleton, ErrorState } from '@/components/ui/Skeleton';
 import { EmptyState } from '@/components/ui/EmptyState';
 
 interface Order {
@@ -15,6 +15,7 @@ interface Order {
   total: string;
   currency: string;
   paymentStatus: string;
+  fulfillmentType: string | null;
   createdAt: string;
   customer: { fullName: string | null; whatsappNumber: string | null; phone: string | null } | null;
   _count: { items: number };
@@ -22,23 +23,36 @@ interface Order {
 
 const STATUS_OPTIONS = [
   { value: '', label: 'All orders' },
-  { value: 'PENDING', label: 'Pending' },
-  { value: 'CONFIRMED', label: 'Confirmed' },
-  { value: 'PACKED', label: 'Packed' },
+  { value: 'PENDING',    label: 'Pending' },
+  { value: 'CONFIRMED',  label: 'Confirmed' },
+  { value: 'PACKED',     label: 'Packed' },
+  { value: 'READY',      label: 'Ready' },
   { value: 'DISPATCHED', label: 'Dispatched' },
-  { value: 'DELIVERED', label: 'Delivered' },
-  { value: 'CANCELLED', label: 'Cancelled' },
+  { value: 'DELIVERED',  label: 'Delivered' },
+  { value: 'QUOTE_SENT', label: 'Quote Sent' },
+  { value: 'BOOKED',     label: 'Booked' },
+  { value: 'CANCELLED',  label: 'Cancelled' },
 ];
+
+const FULFILLMENT_EMOJI: Record<string, string> = {
+  DELIVERY: '🚚',
+  PICKUP: '🏪',
+  DINE_IN: '🍽️',
+  QUOTE: '💬',
+  BOOKING: '📅',
+};
 
 export default function OrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [total, setTotal] = useState(0);
 
-  const fetchOrders = async () => {
+  const fetchOrders = useCallback(async () => {
     setLoading(true);
+    setError(false);
     try {
       const params = new URLSearchParams({ limit: '40' });
       if (search) params.set('search', search);
@@ -46,15 +60,14 @@ export default function OrdersPage() {
       const { data } = await api.get(`/orders?${params}`);
       setOrders(data.data);
       setTotal(data.meta.total);
-    } catch (err) { console.error(err); }
-    finally { setLoading(false); }
-  };
-
-  useEffect(() => { fetchOrders(); }, []);
-  useEffect(() => {
-    const t = setTimeout(fetchOrders, 400);
-    return () => clearTimeout(t);
+    } catch {
+      setError(true);
+    } finally {
+      setLoading(false);
+    }
   }, [search, statusFilter]);
+
+  useEffect(() => { fetchOrders(); }, [fetchOrders]);
 
   return (
     <div className="space-y-6 animate-fade-up">
@@ -78,9 +91,9 @@ export default function OrdersPage() {
           />
         </div>
         <div className="flex items-center gap-2">
-          <Filter className="w-4 h-4 text-[var(--text-muted)] shrink-0" />
           <select
             className="input max-w-[160px]"
+            aria-label="Filter by order status"
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
           >
@@ -92,20 +105,20 @@ export default function OrdersPage() {
       </div>
 
       {/* Table */}
-      <div className="card overflow-hidden p-0">
-        {loading ? (
-          <div className="flex items-center justify-center py-20">
-            <Spinner size="lg" className="text-[var(--brand)]" />
-          </div>
-        ) : orders.length === 0 ? (
-          <div className="p-6">
-            <EmptyState
-              icon={<ShoppingCart className="w-10 h-10" />}
-              title="No orders found"
-              description={search || statusFilter ? 'No orders match your filters.' : 'Orders will appear here when customers place them via your storefront.'}
-            />
-          </div>
-        ) : (
+      {error ? (
+        <ErrorState message="Failed to load orders." onRetry={fetchOrders} />
+      ) : loading ? (
+        <TableSkeleton rows={8} cols={5} />
+      ) : orders.length === 0 ? (
+        <div className="card p-6">
+          <EmptyState
+            icon={<ShoppingCart className="w-10 h-10" />}
+            title="No orders found"
+            description={search || statusFilter ? 'No orders match your filters.' : 'Orders will appear here when customers place them via your storefront.'}
+          />
+        </div>
+      ) : (
+        <div className="card overflow-hidden p-0">
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-[var(--surface-2)] border-b border-[var(--border)]">
@@ -125,7 +138,14 @@ export default function OrdersPage() {
                       <Link href={`/dashboard/orders/${order.id}`} className="font-medium text-[var(--brand)] hover:underline">
                         {order.orderNumber}
                       </Link>
-                      <p className="text-xs text-[var(--text-muted)]">{order._count.items} item{order._count.items !== 1 ? 's' : ''}</p>
+                      <p className="text-xs text-[var(--text-muted)]">
+                        {order.fulfillmentType && (
+                          <span className="mr-1" aria-label={order.fulfillmentType}>
+                            {FULFILLMENT_EMOJI[order.fulfillmentType] ?? ''}
+                          </span>
+                        )}
+                        {order._count.items} item{order._count.items !== 1 ? 's' : ''}
+                      </p>
                     </td>
                     <td className="px-4 py-3 text-[var(--text-secondary)] hidden sm:table-cell">
                       {customerDisplay}
@@ -151,8 +171,8 @@ export default function OrdersPage() {
               })}
             </tbody>
           </table>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -14,7 +14,10 @@ export interface WhatsAppOrderMessage {
   total: string;
   currency: string;
   customerName?: string;
+  fulfillmentType?: string;  // DELIVERY | PICKUP | DINE_IN | QUOTE | BOOKING
   deliveryAddress?: string;
+  tableNumber?: string;
+  scheduledFor?: Date | null;
   notes?: string;
 }
 
@@ -36,11 +39,28 @@ export class WhatsAppService {
   buildOrderMessage(order: WhatsAppOrderMessage): string {
     const lines: string[] = [];
 
-    lines.push(`🛒 *New Order — ${order.storeName}*`);
+    const fulfillmentEmoji: Record<string, string> = {
+      DELIVERY: '🚚',
+      PICKUP:   '🏪',
+      DINE_IN:  '🍽️',
+      QUOTE:    '💬',
+      BOOKING:  '📅',
+    };
+    const fulfillmentLabel: Record<string, string> = {
+      DELIVERY: 'Delivery Order',
+      PICKUP:   'Pickup Order',
+      DINE_IN:  'Dine-In Order',
+      QUOTE:    'Quote Request',
+      BOOKING:  'Booking Request',
+    };
+    const type = order.fulfillmentType ?? 'DELIVERY';
+    const emoji = fulfillmentEmoji[type] ?? '🛒';
+    const label = fulfillmentLabel[type] ?? 'Order';
+
+    lines.push(`${emoji} *${label} — ${order.storeName}*`);
     lines.push(`Order #${order.orderNumber}`);
     lines.push('─────────────────────');
 
-    // Line items
     for (const item of order.items) {
       lines.push(
         `• ${item.name} × ${item.quantity} = ${order.currency} ${item.lineTotal}`,
@@ -50,14 +70,19 @@ export class WhatsAppService {
     lines.push('─────────────────────');
     lines.push(`*Total: ${order.currency} ${order.total}*`);
 
-    // Customer details if provided
     if (order.customerName) {
       lines.push('');
       lines.push(`👤 *Customer:* ${order.customerName}`);
     }
 
-    if (order.deliveryAddress) {
+    // Fulfillment-specific details
+    if (type === 'DINE_IN' && order.tableNumber) {
+      lines.push(`🪑 *Table:* ${order.tableNumber}`);
+    } else if (type === 'DELIVERY' && order.deliveryAddress) {
       lines.push(`📍 *Deliver to:* ${order.deliveryAddress}`);
+    } else if ((type === 'PICKUP' || type === 'BOOKING') && order.scheduledFor) {
+      const dt = new Date(order.scheduledFor);
+      lines.push(`⏰ *${type === 'BOOKING' ? 'Appointment' : 'Pickup time'}:* ${dt.toLocaleString('en-ZM', { dateStyle: 'medium', timeStyle: 'short' })}`);
     }
 
     if (order.notes) {

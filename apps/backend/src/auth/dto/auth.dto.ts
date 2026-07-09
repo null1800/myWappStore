@@ -67,6 +67,22 @@ export class RefreshTokenDto {
   refreshToken: string;
 }
 
+// ─── Reset Password ───────────────────────────────────────────────────────────
+
+export class ResetPasswordDto {
+  @IsString()
+  @IsNotEmpty()
+  accessToken: string;
+
+  @IsString()
+  @MinLength(8, { message: 'Password must be at least 8 characters' })
+  @MaxLength(72, { message: 'Password cannot exceed 72 characters' })
+  @Matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/, {
+    message: 'Password must contain at least one uppercase letter, one lowercase letter, and one number',
+  })
+  newPassword: string;
+}
+
 // ─── Response types (for controller return types) ─────────────────────────────
 
 export interface AuthResponseDto {
@@ -75,6 +91,7 @@ export interface AuthResponseDto {
     email: string;
     fullName: string | null;
     role: string;
+    emailVerified: boolean;
   };
   tenant: {
     id: string;

@@ -26,6 +26,15 @@ model Tenant {
   isActive       Boolean  @default(true) @map("is_active")
   isPublic       Boolean  @default(true) @map("is_public") // marketplace visibility
   plan           String   @default("free") // free | starter | pro
+  // Controls which workflows, labels, and UI flows apply to this store.
+  // 'GENERAL' is the safe default — works for anything. More specific types
+  // unlock type-appropriate features (e.g. RESTAURANT gets kitchen status
+  // display, SERVICE gets quote/booking order types).
+  businessType   String   @default("GENERAL") @map("business_type")
+  // Per-tenant order counter — incremented atomically (single UPDATE) when an
+  // order is created. This replaces a SELECT count()+1 approach, which raced
+  // under concurrent checkout and could issue duplicate order numbers.
+  orderSequence  Int      @default(0) @map("order_sequence")
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @updatedAt @map("updated_at")
 
@@ -35,6 +44,10 @@ model Tenant {
   customers      Customer[]
   orders         Order[]
   inventoryLogs  InventoryLog[]
+  staffInvitations StaffInvitation[]
+  productVariants  ProductVariant[]
+  subscriptions    Subscription[]
+  paymentTransactions PaymentTransaction[]
 
   @@map("tenants")
 }
@@ -51,10 +64,13 @@ model User {
   fullName  String?  @map("full_name")
   role      UserRole @default(OWNER)
   isActive  Boolean  @default(true) @map("is_active")
+  emailVerifiedAt DateTime? @map("email_verified_at")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
   inventoryLogs InventoryLog[]
+  refreshTokens RefreshToken[]
+  sentInvitations StaffInvitation[] @relation("InvitedBy")
 
   @@map("users")
 }
@@ -66,8 +82,53 @@ enum UserRole {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// CATEGORIES — product categories scoped per tenant
+// REFRESH TOKENS — server-side record of issued refresh tokens.
+// The refresh token itself stays a signed JWT (so verification doesn't need a
+// DB hit on every check), but its `jti` claim must match an unrevoked row
+// here. This is what makes rotation and logout actually revoke a token,
+// instead of just relying on the client deleting its cookie.
+// RULE: a row is consumed (revokedAt set) the moment it's used to refresh —
+// each refresh token is single-use. Reuse of a revoked token is treated as
+// a signal of theft and revokes all of that user's other active tokens.
 // ─────────────────────────────────────────────────────────────────────────────
+model RefreshToken {
+  id        String    @id @db.Uuid // = the `jti` claim inside the refresh JWT
+  userId    String    @map("user_id") @db.Uuid
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime  @map("expires_at")
+  revokedAt DateTime? @map("revoked_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@index([userId, revokedAt])
+  @@map("refresh_tokens")
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STAFF INVITATIONS — invite-by-email flow for adding STAFF users to a tenant.
+// The raw invite token is only ever sent in the email link — we store a
+// SHA-256 hash of it here, same pattern as refresh token rotation: nothing
+// usable-to-impersonate sits in the database itself.
+// ─────────────────────────────────────────────────────────────────────────────
+model StaffInvitation {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String    @map("tenant_id") @db.Uuid
+  tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  email       String
+  role        UserRole  @default(STAFF)
+  tokenHash   String    @unique @map("token_hash")
+  invitedById String    @map("invited_by_id") @db.Uuid
+  invitedBy   User      @relation("InvitedBy", fields: [invitedById], references: [id], onDelete: Cascade)
+  expiresAt   DateTime  @map("expires_at")
+  acceptedAt  DateTime? @map("accepted_at")
+  revokedAt   DateTime? @map("revoked_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@index([tenantId, email])
+  @@index([tenantId, acceptedAt, revokedAt, expiresAt]) // listStaff pending query
+  @@map("staff_invitations")
+}
+
 model Category {
   id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   tenantId    String   @map("tenant_id") @db.Uuid
@@ -111,11 +172,17 @@ model Product {
   weightGrams      Int?          @map("weight_grams")
   metaTitle        String?       @map("meta_title")
   metaDescription  String?       @map("meta_description")
+  // When true, stock/price/SKU are tracked per-variant (see ProductVariant)
+  // instead of on this row — the fields above still exist for backward
+  // compatibility (e.g. price acts as the "from" price) but ordering logic
+  // deducts from the chosen variant's stock, not stockQuantity here.
+  hasVariants      Boolean       @default(false) @map("has_variants")
   createdAt        DateTime      @default(now()) @map("created_at")
   updatedAt        DateTime      @updatedAt @map("updated_at")
 
   orderItems     OrderItem[]
   inventoryLogs  InventoryLog[]
+  variants       ProductVariant[]
 
   @@unique([tenantId, slug])
   @@index([tenantId, status]) // storefront listing — most frequent query
@@ -126,6 +193,35 @@ enum ProductStatus {
   ACTIVE
   DRAFT
   ARCHIVED
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PRODUCT VARIANTS — optional. A product with hasVariants=false has none of
+// these and behaves exactly as before (price/stock on the Product row).
+// `options` is a flexible JSON map (e.g. {"Size":"M","Color":"Red"}) since
+// different products use different attribute sets — modeling every possible
+// attribute as its own column/table is overkill for an MVP catalogue.
+// ─────────────────────────────────────────────────────────────────────────────
+model ProductVariant {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  productId     String   @map("product_id") @db.Uuid
+  product       Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  tenantId      String   @map("tenant_id") @db.Uuid
+  tenant        Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name          String   // display label, e.g. "Red / Large"
+  options       Json     // e.g. {"Color": "Red", "Size": "Large"}
+  sku           String?
+  priceOverride Decimal? @map("price_override") @db.Decimal(12, 2) // null = inherit product.price
+  stockQuantity Int      @default(0) @map("stock_quantity")
+  isActive      Boolean  @default(true) @map("is_active")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  orderItems OrderItem[]
+
+  @@index([tenantId])
+  @@index([productId])
+  @@map("product_variants")
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -169,7 +265,16 @@ model Order {
   currency        String        @default("ZMW")
   paymentMethod   String?       @map("payment_method") // whatsapp | mobile_money | cash
   paymentStatus   PaymentStatus @default(UNPAID) @map("payment_status")
+  // Fulfillment — how the customer wants to receive this order.
+  // DELIVERY requires deliveryAddress. PICKUP requires nothing extra.
+  // DINE_IN is relevant for restaurants. QUOTE/BOOKING for service providers.
+  fulfillmentType String        @default("DELIVERY") @map("fulfillment_type")
   deliveryAddress String?       @map("delivery_address")
+  // For restaurants and services: when the customer wants pickup/delivery/appointment
+  scheduledFor    DateTime?     @map("scheduled_for")
+  // Set by merchant to tell the customer when order will be ready
+  estimatedReadyAt DateTime?    @map("estimated_ready_at")
+  tableNumber     String?       @map("table_number") // for dine-in orders
   notes           String?       // customer notes
   merchantNotes   String?       @map("merchant_notes")
   whatsappSentAt  DateTime?     @map("whatsapp_sent_at")
@@ -179,19 +284,24 @@ model Order {
   items OrderItem[]
 
   @@unique([tenantId, orderNumber])
-  @@index([tenantId, status, createdAt]) // dashboard order list
-  @@index([tenantId, customerId])        // customer order history
+  @@index([tenantId, status, createdAt])           // dashboard order list
+  @@index([tenantId, customerId])                  // customer order history
+  @@index([tenantId, fulfillmentType, status])     // restaurant pickup/dine-in queue
   @@map("orders")
 }
 
 enum OrderStatus {
-  PENDING
-  CONFIRMED
-  PACKED
-  DISPATCHED
-  DELIVERED
+  PENDING       // just placed — waiting for merchant acknowledgment
+  CONFIRMED     // merchant accepted
+  PACKED        // restaurant: ready in kitchen / retail: packed
+  DISPATCHED    // out for delivery
+  DELIVERED     // completed delivery
+  READY         // restaurant/pickup: ready for collection
   CANCELLED
   REFUNDED
+  // Service-provider statuses
+  QUOTE_SENT    // merchant sent a quote, customer hasn't confirmed
+  BOOKED        // appointment/booking confirmed
 }
 
 enum PaymentStatus {
@@ -210,8 +320,11 @@ model OrderItem {
   order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
   productId   String?  @map("product_id") @db.Uuid
   product     Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  variantId   String?  @map("variant_id") @db.Uuid
+  variant     ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
   productName String   @map("product_name") // snapshot — never changes
   productSku  String?  @map("product_sku")
+  variantName String?  @map("variant_name") // snapshot, e.g. "Red / Large"
   unitPrice   Decimal  @map("unit_price") @db.Decimal(12, 2) // snapshot
   quantity    Int
   lineTotal   Decimal  @map("line_total") @db.Decimal(14, 2)
@@ -227,6 +340,7 @@ model InventoryLog {
   id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   productId   String   @map("product_id") @db.Uuid
   product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variantId   String?  @map("variant_id") @db.Uuid
   tenantId    String   @map("tenant_id") @db.Uuid
   tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   changeQty   Int      @map("change_qty") // positive = stock in, negative = stock out
@@ -241,3 +355,55 @@ model InventoryLog {
   @@index([tenantId, createdAt])
   @@map("inventory_logs")
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SUBSCRIPTIONS — one active row per tenant.
+// The plan field here is the source of truth; tenants.plan is a denormalised
+// copy used for quick reads (e.g. in auth token minting) and synced on every
+// subscription change. Both fields use the same plan identifiers:
+//   free | starter | pro
+// ─────────────────────────────────────────────────────────────────────────────
+model Subscription {
+  id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId           String    @map("tenant_id") @db.Uuid
+  tenant             Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  plan               String    // free | starter | pro
+  status             String    // active | trialing | past_due | cancelled | expired
+  currentPeriodStart DateTime  @map("current_period_start")
+  currentPeriodEnd   DateTime  @map("current_period_end")
+  trialEndsAt        DateTime? @map("trial_ends_at")
+  cancelledAt        DateTime? @map("cancelled_at")
+  // Paystack-specific — null for the free plan (no payment needed)
+  paystackCustomerId  String?  @map("paystack_customer_id")
+  paystackSubCode     String?  @map("paystack_sub_code")   // subscription code for Paystack API
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+
+  @@unique([tenantId])
+  @@index([status, currentPeriodEnd]) // expiry sweep
+  @@map("subscriptions")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PAYMENT TRANSACTIONS — immutable log of every charge attempt.
+// Never update rows; insert a new row for each event.
+// ─────────────────────────────────────────────────────────────────────────────
+model PaymentTransaction {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId        String   @map("tenant_id") @db.Uuid
+  tenant          Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  provider        String   // paystack | mobile_money | manual
+  providerRef     String?  @map("provider_ref") // provider's own transaction ID
+  type            String   // subscription | one_time
+  plan            String?  // which plan this payment was for
+  amountKobo      Int      @map("amount_kobo") // amount in the provider's smallest unit (kobo for NGN, tambala for ZMW)
+  currency        String   @default("ZMW")
+  status          String   // pending | success | failed | refunded
+  metadata        Json?    // raw provider webhook payload
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@index([tenantId, createdAt])
+  @@index([providerRef])
+  @@map("payment_transactions")
+}
+

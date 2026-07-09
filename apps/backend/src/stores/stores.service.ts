@@ -5,6 +5,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { InProcessCacheService } from '../common/cache/cache.service';
 import { UpdateStoreDto, UpdateSlugDto } from './dto/store.dto';
 
 // Fields returned on the public storefront — no sensitive data
@@ -35,6 +36,7 @@ const MERCHANT_STORE_SELECT = {
   isPublic: true,
   isActive: true,
   plan: true,
+  businessType: true,
   createdAt: true,
   updatedAt: true,
 } as const;
@@ -43,7 +45,10 @@ const MERCHANT_STORE_SELECT = {
 export class StoresService {
   private readonly logger = new Logger(StoresService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cache: InProcessCacheService,
+  ) {}
 
   // ── GET /stores/me ─────────────────────────────────────────────────────────
   // Returns the authenticated merchant's store profile
@@ -71,37 +76,43 @@ export class StoresService {
         ...(dto.phoneWhatsapp !== undefined && { phoneWhatsapp: dto.phoneWhatsapp }),
         ...(dto.primaryColor !== undefined && { primaryColor: dto.primaryColor }),
         ...(dto.isPublic !== undefined && { isPublic: dto.isPublic }),
+        ...(dto.businessType !== undefined && { businessType: dto.businessType }),
       },
       select: MERCHANT_STORE_SELECT,
     });
 
+    // Invalidate public storefront cache so changes are visible immediately
+    this.cache.invalidate(`store:${tenant.slug}`);
     this.logger.log(`Store updated: ${tenantId}`);
     return tenant;
   }
 
   // ── PATCH /stores/me/slug ──────────────────────────────────────────────────
-  // Separate endpoint for slug changes — this changes the public URL
   async updateSlug(tenantId: string, dto: UpdateSlugDto) {
-    // Check slug availability (excluding own current slug)
     const existing = await this.prisma.tenant.findFirst({
-      where: {
-        slug: dto.slug,
-        NOT: { id: tenantId },
-      },
+      where: { slug: dto.slug, NOT: { id: tenantId } },
       select: { id: true },
     });
 
     if (existing) {
-      throw new ConflictException(
-        `The store URL "${dto.slug}" is already taken.`,
-      );
+      throw new ConflictException(`The store URL "${dto.slug}" is already taken.`);
     }
+
+    // Fetch old slug to invalidate its cache before updating
+    const oldTenant = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { slug: true },
+    });
 
     const tenant = await this.prisma.tenant.update({
       where: { id: tenantId },
       data: { slug: dto.slug },
       select: MERCHANT_STORE_SELECT,
     });
+
+    // Invalidate both old and new slug in case of partial cache hits
+    if (oldTenant) this.cache.invalidate(`store:${oldTenant.slug}`);
+    this.cache.invalidate(`store:${dto.slug}`);
 
     this.logger.log(`Slug updated for tenant ${tenantId}: ${dto.slug}`);
     return tenant;
@@ -125,21 +136,19 @@ export class StoresService {
   }
 
   // ── GET /stores/:slug (public) ─────────────────────────────────────────────
-  // Returns public store profile — used by Next.js storefront SSR
-  // No auth required
   async getPublicStore(slug: string) {
+    const cacheKey = `store:${slug}`;
+    const cached = this.cache.get<object>(cacheKey);
+    if (cached) return cached;
+
     const tenant = await this.prisma.tenant.findUnique({
       where: { slug },
       select: PUBLIC_STORE_SELECT,
     });
 
-    if (!tenant) {
-      throw new NotFoundException(`Store "${slug}" not found.`);
-    }
+    if (!tenant) throw new NotFoundException(`Store "${slug}" not found.`);
 
-    // Even if a store exists, only serve it publicly if isPublic=true
-    // Private stores are accessible only via direct link (future: with token)
-    // For MVP, we still serve it — just won't appear in marketplace
+    this.cache.set(cacheKey, tenant);
     return tenant;
   }
 

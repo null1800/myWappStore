@@ -8,6 +8,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { InventoryService } from '../products/inventory.service';
 import { CustomersService } from '../customers/customers.service';
 import { WhatsAppService } from './whatsapp.service';
+import { PlanEnforcementService } from '../billing/plan-enforcement.service';
 import {
   CreateOrderDto,
   UpdateOrderStatusDto,
@@ -16,16 +17,23 @@ import {
 } from './dto/order.dto';
 // Decimal handling removed; using native number
 
-// Valid order status transitions — prevents illegal state changes
-// e.g. a DELIVERED order cannot go back to PENDING
+// Valid order status transitions — prevents illegal state changes.
+// New business-type-specific statuses are additive; existing retail/restaurant
+// flows are unchanged. Branches:
+//   Retail: PENDING → CONFIRMED → PACKED → DISPATCHED → DELIVERED
+//   Restaurant pickup: PENDING → CONFIRMED → PACKED → READY → DELIVERED
+//   Service/quote: PENDING → QUOTE_SENT → CONFIRMED → BOOKED → DELIVERED
 const VALID_TRANSITIONS: Record<string, string[]> = {
-  PENDING:    ['CONFIRMED', 'CANCELLED'],
-  CONFIRMED:  ['PACKED', 'CANCELLED'],
-  PACKED:     ['DISPATCHED', 'CANCELLED'],
+  PENDING:    ['CONFIRMED', 'QUOTE_SENT', 'CANCELLED'],
+  CONFIRMED:  ['PACKED', 'BOOKED', 'CANCELLED'],
+  PACKED:     ['DISPATCHED', 'READY', 'CANCELLED'],
   DISPATCHED: ['DELIVERED', 'CANCELLED'],
+  READY:      ['DELIVERED', 'CANCELLED'],
   DELIVERED:  ['REFUNDED'],
-  CANCELLED:  [],   // terminal state
-  REFUNDED:   [],   // terminal state
+  QUOTE_SENT: ['CONFIRMED', 'CANCELLED'],
+  BOOKED:     ['DELIVERED', 'CANCELLED'],
+  CANCELLED:  [],  // terminal
+  REFUNDED:   [],  // terminal
 };
 
 @Injectable()
@@ -37,29 +45,25 @@ export class OrdersService {
     private readonly inventory: InventoryService,
     private readonly customers: CustomersService,
     private readonly whatsapp: WhatsAppService,
+    private readonly planEnforcement: PlanEnforcementService,
   ) {}
 
   // ── CREATE ORDER ───────────────────────────────────────────────────────────
   // Public endpoint — called when customer initiates WhatsApp checkout.
   // This runs atomically: resolve products → validate stock → create order →
   // deduct stock → auto-create/find customer → generate WhatsApp link.
-  async create(dto: CreateOrderDto): Promise<{
-    order: Record<string, unknown>;
-    whatsappUrl: string;
-  }> {
+  async create(dto: CreateOrderDto) {
     // 1. Resolve tenant from store slug
     const tenant = await this.prisma.tenant.findUnique({
       where: { slug: dto.storeSlug },
       select: {
-        id: true,
-        name: true,
-        phoneWhatsapp: true,
-        isActive: true,
+        id: true, name: true, phoneWhatsapp: true, isActive: true, plan: true,
+        businessType: true,
       },
     });
 
-    if (!tenant || !tenant.isActive) {
-      throw new NotFoundException(`Store "${dto.storeSlug}" not found.`);
+    if (!tenant?.isActive) {
+      throw new BadRequestException('This store is not currently accepting orders.');
     }
 
     if (!tenant.phoneWhatsapp) {
@@ -68,24 +72,32 @@ export class OrdersService {
       );
     }
 
+    // Check monthly order limit (free plan: 50/month, starter: 500/month)
+    await this.planEnforcement.assertCanPlaceOrder(tenant.id);
+
     // 2. Load and validate all products in one query
-    const productIds = dto.items.map((i) => i.productId);
-    const products = await this.prisma.product.findMany({
-      where: {
-        id: { in: productIds },
-        tenantId: tenant.id,
-        status: 'ACTIVE',
-      },
-      select: {
-        id: true,
-        name: true,
-        sku: true,
-        price: true,
-        stockQuantity: true,
-        trackInventory: true,
-        allowBackorder: true,
-      },
-    });
+    const productIds = [...new Set(dto.items.map((i) => i.productId))];
+    const variantIds = dto.items.map((i) => i.variantId).filter(Boolean) as string[];
+
+    const [products, variants] = await Promise.all([
+      this.prisma.product.findMany({
+        where: { id: { in: productIds }, tenantId: tenant.id, status: 'ACTIVE' },
+        select: {
+          id: true, name: true, sku: true, price: true,
+          stockQuantity: true, trackInventory: true, allowBackorder: true,
+          hasVariants: true,
+        },
+      }),
+      variantIds.length > 0
+        ? this.prisma.productVariant.findMany({
+            where: { id: { in: variantIds }, tenantId: tenant.id, isActive: true },
+            select: {
+              id: true, name: true, sku: true, priceOverride: true,
+              stockQuantity: true, productId: true,
+            },
+          })
+        : Promise.resolve([]),
+    ]);
 
     // Verify all requested products exist and are active in this store
     if (products.length !== productIds.length) {
@@ -96,14 +108,26 @@ export class OrdersService {
       );
     }
 
-    // Build product lookup map for O(1) access
     const productMap = new Map(products.map((p) => [p.id, p]));
+    const variantMap = new Map(variants.map((v) => [v.id, v]));
 
-    // 3. Validate stock availability upfront before touching the DB
+    // 3. Validate stock availability upfront
     for (const item of dto.items) {
       const product = productMap.get(item.productId)!;
 
-      if (
+      if (item.variantId) {
+        const variant = variantMap.get(item.variantId);
+        if (!variant || variant.productId !== item.productId) {
+          throw new BadRequestException(
+            `Variant not found for product "${product.name}".`,
+          );
+        }
+        if (!product.allowBackorder && variant.stockQuantity < item.quantity) {
+          throw new BadRequestException(
+            `"${product.name} — ${variant.name}" only has ${variant.stockQuantity} available.`,
+          );
+        }
+      } else if (
         product.trackInventory &&
         !product.allowBackorder &&
         product.stockQuantity < item.quantity
@@ -114,16 +138,21 @@ export class OrdersService {
       }
     }
 
-    // 4. Calculate totals
+    // 4. Calculate totals — variant price overrides product price when set
     const orderItems = dto.items.map((item) => {
       const product = productMap.get(item.productId)!;
-      const unitPrice = Number(product.price);
+      const variant = item.variantId ? variantMap.get(item.variantId) : undefined;
+      const unitPrice = variant?.priceOverride != null
+        ? Number(variant.priceOverride)
+        : Number(product.price);
       const lineTotal = unitPrice * item.quantity;
 
       return {
         productId: item.productId,
+        variantId: item.variantId ?? null,
         productName: product.name,
-        productSku: product.sku,
+        productSku: variant?.sku ?? product.sku,
+        variantName: variant?.name ?? null,
         unitPrice,
         quantity: item.quantity,
         lineTotal,
@@ -136,11 +165,20 @@ export class OrdersService {
     );
     const total = subtotal; // discounts in Phase 2
 
-    // 5. Generate order number — human-readable sequential format
-    const orderNumber = await this.generateOrderNumber(tenant.id);
-
-    // 6. Execute everything in a single transaction
+    // 5. Execute everything in a single transaction
     const order = await this.prisma.$transaction(async (tx) => {
+      // Atomically increment the tenant's order counter and derive the order
+      // number from the returned value. This UPDATE takes a row lock on the
+      // tenant row, so concurrent checkouts for the same store serialize
+      // here instead of racing on a SELECT count() — eliminates duplicate
+      // order numbers under concurrent load.
+      const counterUpdate = await tx.tenant.update({
+        where: { id: tenant.id },
+        data: { orderSequence: { increment: 1 } },
+        select: { orderSequence: true },
+      });
+      const orderNumber = `ORD-${String(counterUpdate.orderSequence).padStart(5, '0')}`;
+
       // Auto-create or find existing customer
       let customerId: string | null = null;
 
@@ -165,21 +203,28 @@ export class OrdersService {
           tenantId: tenant.id,
           customerId,
           orderNumber,
-          status: 'PENDING',
+          status: dto.fulfillmentType === 'QUOTE' ? 'PENDING'
+                : dto.fulfillmentType === 'BOOKING' ? 'PENDING'
+                : 'PENDING',
           subtotal,
           discountAmount: 0,
           total,
           currency: 'ZMW',
           paymentMethod: dto.paymentMethod ?? 'whatsapp',
           paymentStatus: 'UNPAID',
+          fulfillmentType: dto.fulfillmentType ?? 'DELIVERY',
           deliveryAddress: dto.deliveryAddress ?? null,
+          scheduledFor: dto.scheduledFor ? new Date(dto.scheduledFor) : null,
+          tableNumber: dto.tableNumber ?? null,
           notes: dto.notes ?? null,
           whatsappSentAt: new Date(),
           items: {
             create: orderItems.map((item) => ({
               productId: item.productId,
+              variantId: item.variantId ?? null,
               productName: item.productName,
               productSku: item.productSku,
+              variantName: item.variantName ?? null,
               unitPrice: item.unitPrice,
               quantity: item.quantity,
               lineTotal: item.lineTotal,
@@ -187,7 +232,17 @@ export class OrdersService {
           },
         },
         include: {
-          items: true,
+          items: {
+            select: {
+              id: true,
+              productName: true,
+              variantName: true,
+              productSku: true,
+              unitPrice: true,
+              quantity: true,
+              lineTotal: true,
+            },
+          },
           customer: {
             select: { id: true, fullName: true, whatsappNumber: true },
           },
@@ -199,6 +254,7 @@ export class OrdersService {
         const product = productMap.get(item.productId)!;
         await this.inventory.deductStockForOrder({
           productId: item.productId,
+          variantId: item.variantId,
           tenantId: tenant.id,
           quantity: item.quantity,
           orderId: createdOrder.id,
@@ -227,7 +283,7 @@ export class OrdersService {
       storeName: tenant.name,
       orderNumber: order.orderNumber,
       items: order.items.map((item) => ({
-        name: item.productName,
+        name: item.variantName ? `${item.productName} (${item.variantName})` : item.productName,
         quantity: item.quantity,
         unitPrice: item.unitPrice.toString(),
         lineTotal: item.lineTotal.toString(),
@@ -236,7 +292,10 @@ export class OrdersService {
       total: order.total.toString(),
       currency: order.currency,
       customerName: dto.customerName,
+      fulfillmentType: dto.fulfillmentType ?? 'DELIVERY',
       deliveryAddress: dto.deliveryAddress,
+      tableNumber: dto.tableNumber,
+      scheduledFor: dto.scheduledFor ? new Date(dto.scheduledFor) : null,
       notes: dto.notes,
     });
 
@@ -311,26 +370,51 @@ export class OrdersService {
   async findOne(tenantId: string, orderId: string) {
     const order = await this.prisma.order.findFirst({
       where: { id: orderId, tenantId },
-      include: {
+      select: {
+        id: true,
+        orderNumber: true,
+        status: true,
+        paymentStatus: true,
+        paymentMethod: true,
+        fulfillmentType: true,
+        deliveryAddress: true,
+        scheduledFor: true,
+        estimatedReadyAt: true,
+        tableNumber: true,
+        subtotal: true,
+        discountAmount: true,
+        total: true,
+        currency: true,
+        notes: true,
+        merchantNotes: true,
+        createdAt: true,
+        updatedAt: true,
         items: {
           select: {
             id: true,
             productId: true,
+            variantId: true,
             productName: true,
             productSku: true,
+            variantName: true,
             unitPrice: true,
             quantity: true,
             lineTotal: true,
           },
         },
-        customer: true,
+        customer: {
+          select: {
+            id: true,
+            fullName: true,
+            email: true,
+            phone: true,
+            whatsappNumber: true,
+          },
+        },
       },
     });
 
-    if (!order) {
-      throw new NotFoundException('Order not found.');
-    }
-
+    if (!order) throw new NotFoundException('Order not found.');
     return order;
   }
 
@@ -358,12 +442,23 @@ export class OrdersService {
       );
     }
 
-    const updated = await this.prisma.order.update({
-      where: { id: orderId },
+    const result = await this.prisma.order.updateMany({
+      where: { id: orderId, tenantId },
       data: {
         status: dto.status,
         ...(dto.merchantNotes !== undefined && { merchantNotes: dto.merchantNotes }),
+        ...(dto.estimatedReadyAt !== undefined && {
+          estimatedReadyAt: new Date(dto.estimatedReadyAt),
+        }),
       },
+    });
+
+    if (result.count === 0) {
+      throw new NotFoundException('Order not found.');
+    }
+
+    const updated = await this.prisma.order.findFirst({
+      where: { id: orderId, tenantId },
       select: {
         id: true,
         orderNumber: true,
@@ -395,9 +490,17 @@ export class OrdersService {
       throw new NotFoundException('Order not found.');
     }
 
-    return this.prisma.order.update({
-      where: { id: orderId },
+    const result = await this.prisma.order.updateMany({
+      where: { id: orderId, tenantId },
       data: { paymentStatus: dto.paymentStatus },
+    });
+
+    if (result.count === 0) {
+      throw new NotFoundException('Order not found.');
+    }
+
+    return this.prisma.order.findFirst({
+      where: { id: orderId, tenantId },
       select: { id: true, orderNumber: true, paymentStatus: true },
     });
   }
@@ -486,10 +589,8 @@ export class OrdersService {
   }
 
   // ── Private: order number generation ──────────────────────────────────────
-  // Format: ORD-00001, ORD-00002, etc. — sequential per tenant
-  private async generateOrderNumber(tenantId: string): Promise<string> {
-    const count = await this.prisma.order.count({ where: { tenantId } });
-    const next = count + 1;
-    return `ORD-${String(next).padStart(5, '0')}`;
-  }
+  // NOTE: order numbers are now generated atomically inside the create()
+  // transaction via an incrementing tenant.orderSequence counter — see
+  // above. This avoids the SELECT count()+1 race that allowed concurrent
+  // checkouts to generate duplicate order numbers.
 }

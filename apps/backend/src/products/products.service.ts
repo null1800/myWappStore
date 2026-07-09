@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { InventoryService } from './inventory.service';
+import { PlanEnforcementService } from '../billing/plan-enforcement.service';
 import {
   CreateProductDto,
   UpdateProductDto,
@@ -49,10 +50,14 @@ export class ProductsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly inventory: InventoryService,
+    private readonly planEnforcement: PlanEnforcementService,
   ) {}
 
   // ── CREATE ─────────────────────────────────────────────────────────────────
   async create(tenantId: string, dto: CreateProductDto) {
+    // Check plan limits before doing any slug work
+    await this.planEnforcement.assertCanAddProduct(tenantId);
+
     // Generate slug from name if not provided
     const baseSlug = dto.slug ?? generateSlug(dto.name);
 
@@ -173,8 +178,15 @@ export class ProductsService {
       throw new NotFoundException(`Product not found.`);
     }
 
-    const product = await this.prisma.product.update({
-      where: { id: productId },
+    // updateMany (not update) so the write itself is tenant-scoped, not just
+    // the check above — this connection bypasses Postgres RLS (it uses the
+    // Supabase pooler's service role), so tenant isolation for writes lives
+    // entirely in application code. A plain `.update({ where: { id } })`
+    // would mutate any tenant's row if the ownership check above were ever
+    // accidentally removed in a future refactor; updateMany's where clause
+    // makes that structurally impossible regardless.
+    const result = await this.prisma.product.updateMany({
+      where: { id: productId, tenantId },
       data: {
         ...(dto.name !== undefined && { name: dto.name }),
         ...(dto.description !== undefined && { description: dto.description }),
@@ -191,10 +203,16 @@ export class ProductsService {
         ...(dto.metaTitle !== undefined && { metaTitle: dto.metaTitle }),
         ...(dto.metaDescription !== undefined && { metaDescription: dto.metaDescription }),
       },
-      select: PRODUCT_DETAIL_SELECT,
     });
 
-    return product;
+    if (result.count === 0) {
+      throw new NotFoundException(`Product not found.`);
+    }
+
+    return this.prisma.product.findFirst({
+      where: { id: productId, tenantId },
+      select: PRODUCT_DETAIL_SELECT,
+    });
   }
 
   // ── ARCHIVE (soft delete) ──────────────────────────────────────────────────
@@ -209,10 +227,14 @@ export class ProductsService {
       throw new NotFoundException(`Product not found.`);
     }
 
-    await this.prisma.product.update({
-      where: { id: productId },
+    const result = await this.prisma.product.updateMany({
+      where: { id: productId, tenantId },
       data: { status: 'ARCHIVED' },
     });
+
+    if (result.count === 0) {
+      throw new NotFoundException(`Product not found.`);
+    }
 
     this.logger.log(`Product archived: ${existing.name} [${tenantId}]`);
     return { message: `"${existing.name}" has been archived.` };
@@ -273,18 +295,17 @@ export class ProductsService {
   // ── BULK IMAGE UPDATE ──────────────────────────────────────────────────────
   // Called after images are uploaded directly to Supabase Storage from frontend
   async updateImages(tenantId: string, productId: string, imageUrls: string[]) {
-    const existing = await this.prisma.product.findFirst({
+    const result = await this.prisma.product.updateMany({
       where: { id: productId, tenantId },
-      select: { id: true },
+      data: { images: imageUrls },
     });
 
-    if (!existing) {
+    if (result.count === 0) {
       throw new NotFoundException('Product not found.');
     }
 
-    return this.prisma.product.update({
-      where: { id: productId },
-      data: { images: imageUrls },
+    return this.prisma.product.findFirst({
+      where: { id: productId, tenantId },
       select: { id: true, images: true },
     });
   }
