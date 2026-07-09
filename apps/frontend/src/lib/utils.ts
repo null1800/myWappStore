@@ -81,23 +81,29 @@ export function generateSlug(name: string) {
 }
 
 export const ORDER_STATUS_LABELS: Record<string, string> = {
-  PENDING: 'Pending',
-  CONFIRMED: 'Confirmed',
-  PACKED: 'Packed',
+  PENDING:    'Pending',
+  CONFIRMED:  'Confirmed',
+  PACKED:     'Packed',
+  READY:      'Ready',
   DISPATCHED: 'Dispatched',
-  DELIVERED: 'Delivered',
-  CANCELLED: 'Cancelled',
-  REFUNDED: 'Refunded',
+  DELIVERED:  'Delivered',
+  CANCELLED:  'Cancelled',
+  REFUNDED:   'Refunded',
+  QUOTE_SENT: 'Quote Sent',
+  BOOKED:     'Booked',
 };
 
 export const ORDER_STATUS_BADGE: Record<string, string> = {
-  PENDING: 'badge badge-gray',
-  CONFIRMED: 'badge badge-blue',
-  PACKED: 'badge badge-amber',
+  PENDING:    'badge badge-gray',
+  CONFIRMED:  'badge badge-blue',
+  PACKED:     'badge badge-amber',
+  READY:      'badge badge-green',
   DISPATCHED: 'badge badge-amber',
-  DELIVERED: 'badge badge-green',
-  CANCELLED: 'badge badge-red',
-  REFUNDED: 'badge badge-red',
+  DELIVERED:  'badge badge-green',
+  CANCELLED:  'badge badge-red',
+  REFUNDED:   'badge badge-red',
+  QUOTE_SENT: 'badge badge-blue',
+  BOOKED:     'badge badge-blue',
 };
 
 export const PAYMENT_STATUS_BADGE: Record<string, string> = {

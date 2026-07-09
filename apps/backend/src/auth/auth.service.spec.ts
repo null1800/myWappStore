@@ -16,6 +16,13 @@ const mockPrisma = {
     findFirst: jest.fn(),
     findUnique: jest.fn(),
     create: jest.fn(),
+    update: jest.fn(),
+  },
+  refreshToken: {
+    create: jest.fn(),
+    findUnique: jest.fn(),
+    update: jest.fn(),
+    updateMany: jest.fn(),
   },
   $transaction: jest.fn(),
 };
@@ -46,9 +53,13 @@ jest.mock('@supabase/supabase-js', () => ({
       admin: {
         createUser: jest.fn(),
         deleteUser: jest.fn(),
+        updateUserById: jest.fn(),
+        getUserById: jest.fn(),
       },
       signInWithPassword: jest.fn(),
       resetPasswordForEmail: jest.fn(),
+      resend: jest.fn().mockResolvedValue({ data: {}, error: null }),
+      getUser: jest.fn(),
     },
   })),
 }));
@@ -225,11 +236,19 @@ describe('AuthService', () => {
       );
     });
 
-    it('should issue new access token for valid refresh token', async () => {
+    it('should issue new access + refresh token and rotate the old one', async () => {
       mockJwt.verify.mockReturnValue({
         sub: 'user-uuid',
         tenantId: 'tenant-uuid',
         type: 'refresh',
+        jti: 'jti-1',
+      });
+
+      mockPrisma.refreshToken.findUnique.mockResolvedValue({
+        id: 'jti-1',
+        userId: 'user-uuid',
+        expiresAt: new Date(Date.now() + 1000 * 60 * 60),
+        revokedAt: null,
       });
 
       mockPrisma.user.findUnique.mockResolvedValue({
@@ -244,6 +263,162 @@ describe('AuthService', () => {
 
       expect(result).toHaveProperty('accessToken');
       expect(result).toHaveProperty('expiresIn');
+      expect(result).toHaveProperty('refreshToken');
+      // The token just used must be rotated (revoked)
+      expect(mockPrisma.refreshToken.update).toHaveBeenCalledWith({
+        where: { id: 'jti-1' },
+        data: { revokedAt: expect.any(Date) },
+      });
+    });
+
+    it('should reject and revoke all sessions when a refresh token is reused', async () => {
+      mockJwt.verify.mockReturnValue({
+        sub: 'user-uuid',
+        tenantId: 'tenant-uuid',
+        type: 'refresh',
+        jti: 'jti-already-used',
+      });
+
+      mockPrisma.refreshToken.findUnique.mockResolvedValue({
+        id: 'jti-already-used',
+        userId: 'user-uuid',
+        expiresAt: new Date(Date.now() + 1000 * 60 * 60),
+        revokedAt: new Date(), // already used once before
+      });
+
+      await expect(service.refresh('reused-refresh-token')).rejects.toThrow(
+        UnauthorizedException,
+      );
+
+      expect(mockPrisma.refreshToken.updateMany).toHaveBeenCalledWith({
+        where: { userId: 'user-uuid', revokedAt: null },
+        data: { revokedAt: expect.any(Date) },
+      });
+    });
+  });
+
+  // ── Logout ─────────────────────────────────────────────────────────────────
+
+  describe('logout', () => {
+    it('should revoke the refresh token matching the cookie', async () => {
+      mockJwt.verify.mockReturnValue({ jti: 'jti-to-revoke' });
+
+      await service.logout('some-refresh-token');
+
+      expect(mockPrisma.refreshToken.updateMany).toHaveBeenCalledWith({
+        where: { id: 'jti-to-revoke', revokedAt: null },
+        data: { revokedAt: expect.any(Date) },
+      });
+    });
+
+    it('should do nothing when no refresh token is present', async () => {
+      await service.logout(undefined);
+      expect(mockPrisma.refreshToken.updateMany).not.toHaveBeenCalled();
+    });
+  });
+
+  // ── Reset password ────────────────────────────────────────────────────────
+
+  describe('resetPassword', () => {
+    it('should throw UnauthorizedException for an invalid/expired access token', async () => {
+      const supabaseAdmin = (service as any).supabaseAdmin;
+      supabaseAdmin.auth.getUser.mockResolvedValue({
+        data: { user: null },
+        error: { message: 'invalid token' },
+      });
+
+      await expect(service.resetPassword('bad-token', 'NewPass1234')).rejects.toThrow(
+        UnauthorizedException,
+      );
+    });
+
+    it('should update the password and revoke all active sessions', async () => {
+      const supabaseAdmin = (service as any).supabaseAdmin;
+      supabaseAdmin.auth.getUser.mockResolvedValue({
+        data: { user: { id: 'supabase-user-id' } },
+        error: null,
+      });
+      supabaseAdmin.auth.admin.updateUserById.mockResolvedValue({ error: null });
+      mockPrisma.user.findUnique.mockResolvedValue({ id: 'user-uuid' });
+
+      await service.resetPassword('valid-token', 'NewPass1234');
+
+      expect(supabaseAdmin.auth.admin.updateUserById).toHaveBeenCalledWith(
+        'supabase-user-id',
+        { password: 'NewPass1234' },
+      );
+      expect(mockPrisma.refreshToken.updateMany).toHaveBeenCalledWith({
+        where: { userId: 'user-uuid', revokedAt: null },
+        data: { revokedAt: expect.any(Date) },
+      });
+    });
+  });
+
+  // ── Resend verification email ─────────────────────────────────────────────
+
+  describe('resendVerificationEmail', () => {
+    it('should resend when the user exists and is unverified', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({
+        email: 'owner@example.com',
+        emailVerifiedAt: null,
+      });
+      const supabaseAdmin = (service as any).supabaseAdmin;
+
+      await service.resendVerificationEmail('user-uuid');
+
+      expect(supabaseAdmin.auth.resend).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'signup', email: 'owner@example.com' }),
+      );
+    });
+
+    it('should no-op when already verified', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({
+        email: 'owner@example.com',
+        emailVerifiedAt: new Date(),
+      });
+      const supabaseAdmin = (service as any).supabaseAdmin;
+
+      await service.resendVerificationEmail('user-uuid');
+
+      expect(supabaseAdmin.auth.resend).not.toHaveBeenCalled();
+    });
+  });
+
+  // ── Sync email verification ───────────────────────────────────────────────
+
+  describe('syncEmailVerification', () => {
+    it('should mark verified when Supabase confirms the email', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({
+        authId: 'supabase-user-id',
+        emailVerifiedAt: null,
+      });
+      const supabaseAdmin = (service as any).supabaseAdmin;
+      supabaseAdmin.auth.admin.getUserById.mockResolvedValue({
+        data: { user: { email_confirmed_at: '2026-01-01T00:00:00.000Z' } },
+        error: null,
+      });
+
+      const result = await service.syncEmailVerification('user-uuid');
+
+      expect(result.emailVerified).toBe(true);
+      expect(mockPrisma.user.update).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: 'user-uuid' } }),
+      );
+    });
+
+    it('should return false when Supabase has not confirmed it yet', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({
+        authId: 'supabase-user-id',
+        emailVerifiedAt: null,
+      });
+      const supabaseAdmin = (service as any).supabaseAdmin;
+      supabaseAdmin.auth.admin.getUserById.mockResolvedValue({
+        data: { user: { email_confirmed_at: null } },
+        error: null,
+      });
+
+      const result = await service.syncEmailVerification('user-uuid');
+      expect(result.emailVerified).toBe(false);
     });
   });
 });

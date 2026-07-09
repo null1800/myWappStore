@@ -3,6 +3,7 @@ import { NotFoundException } from '@nestjs/common';
 import { ProductsService } from './products.service';
 import { InventoryService } from './inventory.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { PlanEnforcementService } from '../billing/plan-enforcement.service';
 
 const mockProduct = {
   id: 'product-uuid',
@@ -26,6 +27,7 @@ const mockPrisma = {
     findMany: jest.fn(),
     create: jest.fn(),
     update: jest.fn(),
+    updateMany: jest.fn(),
     count: jest.fn(),
   },
   $transaction: jest.fn(),
@@ -47,6 +49,10 @@ describe('ProductsService', () => {
         ProductsService,
         { provide: PrismaService, useValue: mockPrisma },
         { provide: InventoryService, useValue: mockInventory },
+        {
+          provide: PlanEnforcementService,
+          useValue: { assertCanAddProduct: jest.fn().mockResolvedValue(undefined) },
+        },
       ],
     }).compile();
 
@@ -108,18 +114,27 @@ describe('ProductsService', () => {
   describe('archive', () => {
     it('should archive the product (soft delete)', async () => {
       mockPrisma.product.findFirst.mockResolvedValue({ id: 'product-uuid', name: 'iPhone Case' });
-      mockPrisma.product.update.mockResolvedValue({ status: 'ARCHIVED' });
+      mockPrisma.product.updateMany.mockResolvedValue({ count: 1 });
 
       const result = await service.archive('tenant-uuid', 'product-uuid');
       expect(result.message).toContain('archived');
-      expect(mockPrisma.product.update).toHaveBeenCalledWith(
-        expect.objectContaining({ data: { status: 'ARCHIVED' } }),
+      expect(mockPrisma.product.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'product-uuid', tenantId: 'tenant-uuid' },
+          data: { status: 'ARCHIVED' },
+        }),
       );
     });
 
     it('should throw NotFoundException if product not found', async () => {
       mockPrisma.product.findFirst.mockResolvedValue(null);
       await expect(service.archive('tenant-uuid', 'bad-id')).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw NotFoundException if the update matches no rows (lost ownership race)', async () => {
+      mockPrisma.product.findFirst.mockResolvedValue({ id: 'product-uuid', name: 'iPhone Case' });
+      mockPrisma.product.updateMany.mockResolvedValue({ count: 0 });
+      await expect(service.archive('tenant-uuid', 'product-uuid')).rejects.toThrow(NotFoundException);
     });
   });
 

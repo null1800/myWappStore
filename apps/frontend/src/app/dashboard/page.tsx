@@ -6,7 +6,8 @@ import { ShoppingCart, Package, Users, TrendingUp, ArrowRight, Clock } from 'luc
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/store/auth.store';
 import { formatCurrency, formatRelative } from '@/lib/utils';
-import { Spinner } from '@/components/ui/Spinner';
+import { StatsSkeleton, CardSkeleton } from '@/components/ui/Skeleton';
+import { EmailVerificationBanner } from '@/components/dashboard/EmailVerificationBanner';
 
 interface Summary {
   totalOrders: number;
@@ -42,14 +43,16 @@ export default function DashboardPage() {
         setSummary(summaryRes.data.data);
         setRecentOrders(ordersRes.data.data);
       })
-      .catch(console.error)
+      .catch(() => {})  // non-fatal — skeleton stays until resolved
       .finally(() => setLoading(false));
   }, []);
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-24">
-        <Spinner size="lg" className="text-[var(--brand)]" />
+      <div className="space-y-6 animate-fade-up">
+        <EmailVerificationBanner />
+        <StatsSkeleton count={4} />
+        <CardSkeleton rows={5} />
       </div>
     );
   }
@@ -93,6 +96,8 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6 animate-fade-up">
+      <EmailVerificationBanner />
+
       {/* Greeting */}
       <div>
         <h1 className="text-2xl font-bold text-[var(--text-primary)]">

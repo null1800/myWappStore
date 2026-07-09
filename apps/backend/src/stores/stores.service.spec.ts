@@ -2,6 +2,13 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException, ConflictException } from '@nestjs/common';
 import { StoresService } from './stores.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { InProcessCacheService } from '../common/cache/cache.service';
+
+const mockCache = {
+  get: jest.fn().mockReturnValue(null),
+  set: jest.fn(),
+  invalidate: jest.fn(),
+};
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
@@ -51,6 +58,7 @@ describe('StoresService', () => {
       providers: [
         StoresService,
         { provide: PrismaService, useValue: mockPrisma },
+        { provide: InProcessCacheService, useValue: mockCache },
       ],
     }).compile();
 
@@ -133,7 +141,7 @@ describe('StoresService', () => {
     it('should return public store data', async () => {
       mockPrisma.tenant.findUnique.mockResolvedValue(mockTenant);
       const result = await service.getPublicStore('rays-electronics');
-      expect(result.slug).toBe('rays-electronics');
+      expect((result as any).slug).toBe('rays-electronics');
     });
 
     it('should throw NotFoundException for unknown slug', async () => {

@@ -59,8 +59,11 @@ export class CategoriesService {
 
     if (!existing) throw new NotFoundException('Category not found.');
 
-    return this.prisma.category.update({
-      where: { id: categoryId },
+    // updateMany so the write is itself tenant-scoped, not just the check
+    // above (no DB-level RLS backstop on this connection — see products
+    // service for the full rationale).
+    const result = await this.prisma.category.updateMany({
+      where: { id: categoryId, tenantId },
       data: {
         ...(dto.name !== undefined && { name: dto.name }),
         ...(dto.description !== undefined && { description: dto.description }),
@@ -69,6 +72,10 @@ export class CategoriesService {
         ...(dto.isActive !== undefined && { isActive: dto.isActive }),
       },
     });
+
+    if (result.count === 0) throw new NotFoundException('Category not found.');
+
+    return this.prisma.category.findFirst({ where: { id: categoryId, tenantId } });
   }
 
   async remove(tenantId: string, categoryId: string) {
@@ -86,7 +93,12 @@ export class CategoriesService {
       );
     }
 
-    await this.prisma.category.delete({ where: { id: categoryId } });
+    const result = await this.prisma.category.deleteMany({
+      where: { id: categoryId, tenantId },
+    });
+
+    if (result.count === 0) throw new NotFoundException('Category not found.');
+
     return { message: 'Category deleted.' };
   }
 }

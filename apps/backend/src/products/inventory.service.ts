@@ -7,11 +7,12 @@ import { PrismaService } from '../prisma/prisma.service';
 
 export interface DeductStockOptions {
   productId: string;
+  variantId?: string;       // if set, deduct from variant stock instead of product stock
   tenantId: string;
   quantity: number;
-  orderId: string;        // reference for audit log
+  orderId: string;          // reference for audit log
   allowBackorder: boolean;
-  tx?: any;              // optional Prisma transaction context
+  tx?: any;                 // optional Prisma transaction context
 }
 
 @Injectable()
@@ -82,14 +83,67 @@ export class InventoryService {
   }
 
   // ── Deduct stock when order is placed ─────────────────────────────────────
-  // Called from OrdersService inside an existing transaction
+  // Called from OrdersService inside an existing transaction.
+  //
+  // This used to be read-then-write (findFirst → compute newQty → update),
+  // which races: under concurrent checkout, two requests can both read the
+  // same stockQuantity, both pass the stock check, and the second write
+  // silently overwrites the first — a lost update that can oversell stock.
+  //
+  // Fixed by doing the check-and-decrement as a single atomic UPDATE
+  // statement. Postgres evaluates the WHERE clause against the row at the
+  // moment of the write, so a losing concurrent request simply matches zero
+  // rows instead of corrupting the count.
   async deductStockForOrder(options: DeductStockOptions) {
-    const { productId, tenantId, quantity, orderId, allowBackorder, tx } = options;
+    const { productId, variantId, tenantId, quantity, orderId, allowBackorder, tx } = options;
     const client = tx ?? this.prisma;
 
+    // ── Variant-level deduction ────────────────────────────────────────────
+    if (variantId) {
+      const backorderAllowed = allowBackorder;
+
+      if (backorderAllowed) {
+        await client.$executeRaw`
+          UPDATE "product_variants"
+          SET "stock_quantity" = GREATEST("stock_quantity" - ${quantity}, 0)
+          WHERE "id" = ${variantId}::uuid AND "tenant_id" = ${tenantId}::uuid
+        `;
+      } else {
+        const result = await client.productVariant.updateMany({
+          where: { id: variantId, tenantId, stockQuantity: { gte: quantity } },
+          data: { stockQuantity: { decrement: quantity } },
+        });
+
+        if (result.count === 0) {
+          const current = await client.productVariant.findFirst({
+            where: { id: variantId, tenantId },
+            select: { stockQuantity: true, name: true },
+          });
+          throw new BadRequestException(
+            `"${current?.name ?? 'Variant'}" is out of stock. Only ${current?.stockQuantity ?? 0} available.`,
+          );
+        }
+      }
+
+      await client.inventoryLog.create({
+        data: {
+          productId,
+          variantId,
+          tenantId,
+          changeQty: -quantity,
+          reason: 'order',
+          referenceId: orderId,
+          note: 'Deducted for order',
+        },
+      });
+
+      return;
+    }
+
+    // ── Product-level deduction (no variant) ──────────────────────────────
     const product = await client.product.findFirst({
       where: { id: productId, tenantId },
-      select: { stockQuantity: true, trackInventory: true, name: true, allowBackorder: true },
+      select: { trackInventory: true, name: true, allowBackorder: true },
     });
 
     if (!product) {
@@ -99,18 +153,41 @@ export class InventoryService {
     // Skip stock check if inventory tracking is disabled for this product
     if (!product.trackInventory) return;
 
-    const newQty = product.stockQuantity - quantity;
+    const backorderAllowed = allowBackorder || product.allowBackorder;
 
-    if (newQty < 0 && !allowBackorder && !product.allowBackorder) {
-      throw new BadRequestException(
-        `"${product.name}" is out of stock. Only ${product.stockQuantity} available.`,
-      );
+    if (backorderAllowed) {
+      // Backorder allowed — still atomic, and clamps at 0 (matches prior
+      // behavior of not tracking negative stock) via a single UPDATE.
+      await client.$executeRaw`
+        UPDATE "products"
+        SET "stock_quantity" = GREATEST("stock_quantity" - ${quantity}, 0)
+        WHERE "id" = ${productId}::uuid AND "tenant_id" = ${tenantId}::uuid
+      `;
+    } else {
+      // No backorder — the WHERE clause only matches if enough stock
+      // remains *at write time*, so a losing concurrent request gets
+      // count === 0 instead of an oversold negative balance.
+      const result = await client.product.updateMany({
+        where: {
+          id: productId,
+          tenantId,
+          stockQuantity: { gte: quantity },
+        },
+        data: { stockQuantity: { decrement: quantity } },
+      });
+
+      if (result.count === 0) {
+        // Stock changed between our earlier validation and now (lost the
+        // race to a concurrent order) — re-check for an accurate message.
+        const current = await client.product.findFirst({
+          where: { id: productId, tenantId },
+          select: { stockQuantity: true },
+        });
+        throw new BadRequestException(
+          `"${product.name}" is out of stock. Only ${current?.stockQuantity ?? 0} available.`,
+        );
+      }
     }
-
-    await client.product.update({
-      where: { id: productId },
-      data: { stockQuantity: Math.max(0, newQty) },
-    });
 
     await client.inventoryLog.create({
       data: {

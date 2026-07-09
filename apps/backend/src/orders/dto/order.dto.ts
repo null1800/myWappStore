@@ -7,6 +7,8 @@ import {
   IsPositive,
   IsNotEmpty,
   IsEmail,
+  IsIn,
+  IsDateString,
   ValidateNested,
   Min,
   Max,
@@ -16,11 +18,15 @@ import {
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
-// ─── Order Item (line item inside CreateOrderDto) ─────────────────────────────
+// ─── Order Item ────────────────────────────────────────────────────────────────
 
 export class CreateOrderItemDto {
   @IsUUID()
   productId: string;
+
+  @IsOptional()
+  @IsUUID()
+  variantId?: string;
 
   @IsInt()
   @IsPositive({ message: 'Quantity must be at least 1' })
@@ -28,12 +34,14 @@ export class CreateOrderItemDto {
   quantity: number;
 }
 
+// Fulfillment types — how the customer wants to receive the order
+export const FULFILLMENT_TYPES = ['DELIVERY', 'PICKUP', 'DINE_IN', 'QUOTE', 'BOOKING'] as const;
+export type FulfillmentType = (typeof FULFILLMENT_TYPES)[number];
+
 // ─── Create Order ─────────────────────────────────────────────────────────────
-// Called when customer clicks "Order via WhatsApp" on the storefront.
-// No auth required — this is a public endpoint.
+// Public endpoint — no auth required. storeSlug resolves the tenant.
 
 export class CreateOrderDto {
-  // The store slug is passed so the API can resolve tenantId without auth
   @IsString()
   @IsNotEmpty()
   storeSlug: string;
@@ -44,7 +52,7 @@ export class CreateOrderDto {
   @Type(() => CreateOrderItemDto)
   items: CreateOrderItemDto[];
 
-  // Customer info — used to auto-create or find existing customer record
+  // Customer info
   @IsOptional()
   @IsString()
   @MaxLength(100)
@@ -64,32 +72,50 @@ export class CreateOrderDto {
   @MaxLength(20)
   customerWhatsapp?: string;
 
+  // Fulfillment
+  @IsOptional()
+  @IsIn(FULFILLMENT_TYPES, {
+    message: `fulfillmentType must be one of: ${FULFILLMENT_TYPES.join(', ')}`,
+  })
+  fulfillmentType?: FulfillmentType;
+
   @IsOptional()
   @IsString()
   @MaxLength(500)
   deliveryAddress?: string;
 
   @IsOptional()
+  @IsDateString()
+  scheduledFor?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(10)
+  tableNumber?: string;
+
+  @IsOptional()
   @IsString()
   @MaxLength(1000)
   notes?: string;
 
-  // Payment method chosen at checkout
   @IsOptional()
   @IsString()
-  paymentMethod?: string; // 'whatsapp' | 'mobile_money' | 'cash'
+  paymentMethod?: string;
 }
 
 // ─── Update Order Status ──────────────────────────────────────────────────────
 
 export enum OrderStatusEnum {
-  PENDING = 'PENDING',
-  CONFIRMED = 'CONFIRMED',
-  PACKED = 'PACKED',
+  PENDING    = 'PENDING',
+  CONFIRMED  = 'CONFIRMED',
+  PACKED     = 'PACKED',
   DISPATCHED = 'DISPATCHED',
-  DELIVERED = 'DELIVERED',
-  CANCELLED = 'CANCELLED',
-  REFUNDED = 'REFUNDED',
+  DELIVERED  = 'DELIVERED',
+  READY      = 'READY',
+  CANCELLED  = 'CANCELLED',
+  REFUNDED   = 'REFUNDED',
+  QUOTE_SENT = 'QUOTE_SENT',
+  BOOKED     = 'BOOKED',
 }
 
 export class UpdateOrderStatusDto {
@@ -102,15 +128,20 @@ export class UpdateOrderStatusDto {
   @IsString()
   @MaxLength(500)
   merchantNotes?: string;
+
+  // For restaurants: set when kitchen says the order will be ready
+  @IsOptional()
+  @IsDateString()
+  estimatedReadyAt?: string;
 }
 
 // ─── Update Payment Status ────────────────────────────────────────────────────
 
 export enum PaymentStatusEnum {
-  UNPAID = 'UNPAID',
-  PAID = 'PAID',
+  UNPAID         = 'UNPAID',
+  PAID           = 'PAID',
   PARTIALLY_PAID = 'PARTIALLY_PAID',
-  REFUNDED = 'REFUNDED',
+  REFUNDED       = 'REFUNDED',
 }
 
 export class UpdatePaymentStatusDto {
@@ -140,11 +171,11 @@ export class OrderQueryDto {
 
   @IsOptional()
   @IsString()
-  search?: string; // searches order number or customer name
+  search?: string;
 
   @IsOptional()
   @IsString()
-  dateFrom?: string; // ISO date string
+  dateFrom?: string;
 
   @IsOptional()
   @IsString()

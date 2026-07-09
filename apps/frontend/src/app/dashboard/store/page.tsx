@@ -18,8 +18,18 @@ interface StoreSettings {
   logoUrl: string | null;
   bannerUrl: string | null;
   isPublic: boolean;
+  businessType: string;
   plan: string;
 }
+
+const BUSINESS_TYPES = [
+  { value: 'GENERAL',   label: 'General Store' },
+  { value: 'RESTAURANT', label: 'Restaurant / Food' },
+  { value: 'RETAIL',    label: 'Retail Shop' },
+  { value: 'GROCERY',   label: 'Grocery / Supermarket' },
+  { value: 'PHARMACY',  label: 'Pharmacy / Health' },
+  { value: 'SERVICE',   label: 'Service Provider' },
+];
 
 export default function StoreSettingsPage() {
   const { tenant, setAuth, user } = useAuthStore();
@@ -48,6 +58,7 @@ export default function StoreSettingsPage() {
         phoneWhatsapp: store.phoneWhatsapp,
         primaryColor:  store.primaryColor,
         isPublic:      store.isPublic,
+        businessType:  store.businessType,
       });
       setStore(data.data);
       toast.success('Store settings saved');
@@ -105,7 +116,24 @@ export default function StoreSettingsPage() {
         </div>
 
         <div>
-          <label className="label">Description</label>
+          <label className="label" htmlFor="business-type">Business Type</label>
+          <select
+            id="business-type"
+            className="input"
+            value={store.businessType ?? 'GENERAL'}
+            onChange={(e) => setStore((s) => s ? { ...s, businessType: e.target.value } : s)}
+          >
+            {BUSINESS_TYPES.map(({ value, label }) => (
+              <option key={value} value={value}>{label}</option>
+            ))}
+          </select>
+          <p className="text-xs text-[var(--text-muted)] mt-1">
+            Controls order workflows and storefront labels
+          </p>
+        </div>
+
+        <div>
+          <label className="label" htmlFor="store-description">Description</label>
           <textarea
             className="input resize-none"
             rows={3}
@@ -210,9 +238,9 @@ export default function StoreSettingsPage() {
           </div>
           <span className="badge badge-green capitalize">{store.plan}</span>
         </div>
-        <p className="text-sm text-[var(--text-muted)] mt-3">
-          Subscription plans and billing will be available in Phase 2.
-        </p>
+        <a href="/dashboard/billing" className="mt-3 inline-block text-sm text-[var(--brand)] hover:underline">
+          Manage billing →
+        </a>
       </div>
     </div>
   );

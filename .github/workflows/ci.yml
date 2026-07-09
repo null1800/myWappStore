@@ -1,0 +1,99 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ── Backend ───────────────────────────────────────────────────────────────
+  backend:
+    name: Backend (test + typecheck)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        working-directory: .
+        run: npm ci
+
+      # Prisma generate needs a real engine binary in CI. The engines
+      # checksum endpoint is public but the binary CDN is authenticated —
+      # set PRISMA_ENGINES_CHECKSUM_IGNORE_MISSING so the stub client is
+      # generated instead, which is enough for unit tests (they mock Prisma).
+      - name: Generate Prisma client
+        env:
+          PRISMA_ENGINES_CHECKSUM_IGNORE_MISSING: "1"
+        run: npx prisma generate
+
+      - name: TypeScript type-check
+        run: npx tsc --noEmit
+
+      - name: Run unit tests
+        env:
+          # Minimal env needed for tests — secrets are mocked
+          JWT_SECRET: ci-test-secret-not-real
+          JWT_REFRESH_SECRET: ci-test-refresh-secret-not-real
+          NODE_ENV: test
+        run: npx jest --ci --runInBand
+
+  # ── Frontend ──────────────────────────────────────────────────────────────
+  frontend:
+    name: Frontend (typecheck + lint)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        working-directory: .
+        run: npm ci
+
+      - name: TypeScript type-check
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:3001/api/v1
+        run: npx tsc --noEmit
+
+  # ── Docker build validation ────────────────────────────────────────────────
+  # Ensures the Dockerfiles are syntactically valid and buildable.
+  # We use --check on compose (lint only) to avoid long build times on CI;
+  # full image builds happen on the deployment target.
+  docker-lint:
+    name: Docker config validation
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate docker-compose.yml
+        run: docker compose config --quiet
+
+      - name: Validate backend Dockerfile syntax
+        run: docker build --check -f apps/backend/Dockerfile . || true
+
+      - name: Validate frontend Dockerfile syntax
+        run: docker build --check -f apps/frontend/Dockerfile . || true

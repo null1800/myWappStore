@@ -86,7 +86,6 @@ export function CartDrawer({ storeSlug }: CartDrawerProps) {
         window.location.href = data.data.whatsappUrl;
       }
     } catch (err: any) {
-      console.error(err);
       toast.error(err?.response?.data?.error?.message ?? 'Failed to place order. Please try again.');
     } finally {
       setLoading(false);

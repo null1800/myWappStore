@@ -1,12 +1,18 @@
-import { Module } from '@nestjs/common';
+import { Module, Global } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
-import { ThrottlerModule } from '@nestjs/throttler';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
 import { StoresModule } from './stores/stores.module';
 import { ProductsModule } from './products/products.module';
 import { OrdersModule } from './orders/orders.module';
 import { CustomersModule } from './customers/customers.module';
+import { ReportsModule } from './reports/reports.module';
+import { StaffModule } from './staff/staff.module';
+import { BillingModule } from './billing/billing.module';
+import { CacheModule } from './common/cache/cache.module';
+import { HealthController } from './health/health.controller';
 
 @Module({
   imports: [
@@ -34,6 +40,14 @@ import { CustomersModule } from './customers/customers.module';
     ProductsModule,
     OrdersModule,
     CustomersModule,
+    ReportsModule,
+    StaffModule,
+    BillingModule,
+    CacheModule,
+  ],
+  controllers: [HealthController],
+  providers: [
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
   ],
 })
 export class AppModule {}

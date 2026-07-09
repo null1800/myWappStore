@@ -2,12 +2,26 @@ import {
   IsString,
   IsOptional,
   IsBoolean,
-  IsUrl,
+  IsIn,
   MaxLength,
   MinLength,
   Matches,
   IsHexColor,
 } from 'class-validator';
+
+// Supported business types — drives workflow labels and available features.
+// Kept as a plain string (not a Postgres enum) so new types need only a
+// deploy + app change, not an enum ALTER + migration.
+export const BUSINESS_TYPES = [
+  'GENERAL',
+  'RESTAURANT',
+  'RETAIL',
+  'GROCERY',
+  'PHARMACY',
+  'SERVICE',
+] as const;
+
+export type BusinessType = (typeof BUSINESS_TYPES)[number];
 
 // ─── Update Store ─────────────────────────────────────────────────────────────
 // All fields optional — merchant updates only what they want to change (PATCH)
@@ -37,6 +51,12 @@ export class UpdateStoreDto {
   @IsOptional()
   @IsBoolean()
   isPublic?: boolean;
+
+  @IsOptional()
+  @IsIn(BUSINESS_TYPES, {
+    message: `businessType must be one of: ${BUSINESS_TYPES.join(', ')}`,
+  })
+  businessType?: BusinessType;
 }
 
 // ─── Update Slug ──────────────────────────────────────────────────────────────

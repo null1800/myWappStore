@@ -156,9 +156,15 @@ export class CustomersService {
 
     if (!customer) throw new NotFoundException('Customer not found.');
 
-    return this.prisma.customer.update({
-      where: { id: customerId },
+    const result = await this.prisma.customer.updateMany({
+      where: { id: customerId, tenantId },
       data: { notes },
+    });
+
+    if (result.count === 0) throw new NotFoundException('Customer not found.');
+
+    return this.prisma.customer.findFirst({
+      where: { id: customerId, tenantId },
       select: { id: true, notes: true },
     });
   }

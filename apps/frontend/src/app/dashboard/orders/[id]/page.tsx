@@ -19,18 +19,28 @@ import { toast } from 'sonner';
 const NEXT_STATUS: Record<string, string | null> = {
   PENDING:    'CONFIRMED',
   CONFIRMED:  'PACKED',
-  PACKED:     'DISPATCHED',
-  DISPATCHED: 'DELIVERED',
+  PACKED:     'READY',      // restaurant/pickup path
+  READY:      'DELIVERED',
+  DISPATCHED: 'DELIVERED',  // delivery path (PACKED → DISPATCHED)
   DELIVERED:  null,
+  QUOTE_SENT: 'CONFIRMED',
+  BOOKED:     'DELIVERED',
   CANCELLED:  null,
   REFUNDED:   null,
+};
+
+// Secondary action — PACKED can go to DISPATCHED (delivery) instead of READY
+const ALT_NEXT_STATUS: Record<string, { status: string; label: string } | undefined> = {
+  PACKED: { status: 'DISPATCHED', label: 'Mark as Dispatched' },
 };
 
 const NEXT_STATUS_LABEL: Record<string, string> = {
   CONFIRMED:  'Mark as Confirmed',
   PACKED:     'Mark as Packed',
+  READY:      'Ready for Collection',
   DISPATCHED: 'Mark as Dispatched',
   DELIVERED:  'Mark as Delivered',
+  BOOKED:     'Mark as Booked',
 };
 
 interface OrderDetail {
@@ -39,14 +49,17 @@ interface OrderDetail {
   status: string;
   paymentStatus: string;
   paymentMethod: string | null;
+  fulfillmentType: string | null;
+  deliveryAddress: string | null;
+  scheduledFor: string | null;
+  estimatedReadyAt: string | null;
+  tableNumber: string | null;
   subtotal: string;
   discountAmount: string;
   total: string;
   currency: string;
-  deliveryAddress: string | null;
   notes: string | null;
   merchantNotes: string | null;
-  whatsappSentAt: string | null;
   createdAt: string;
   updatedAt: string;
   customer: {
@@ -179,7 +192,7 @@ export default function OrderDetailPage() {
 
       {/* Action bar */}
       <div className="card p-4 flex flex-wrap gap-3">
-        {/* Advance status */}
+        {/* Primary advance */}
         {nextStatus && (
           <button
             onClick={advanceStatus}
@@ -192,6 +205,26 @@ export default function OrderDetailPage() {
                 <ChevronRight className="w-4 h-4" />
               </>
             )}
+          </button>
+        )}
+
+        {/* Secondary action — e.g. PACKED can go to DISPATCHED (delivery)
+            instead of READY (pickup/restaurant). Both are valid paths. */}
+        {ALT_NEXT_STATUS[order.status] && (
+          <button
+            onClick={() => {
+              const alt = ALT_NEXT_STATUS[order.status];
+              if (!alt) return;
+              setUpdating(true);
+              api.patch(`/orders/${order.id}/status`, { status: alt.status })
+                .then(() => setOrder((o) => o ? { ...o, status: alt.status } : o))
+                .catch((err: any) => toast.error(err?.response?.data?.error?.message ?? 'Failed to update status'))
+                .finally(() => setUpdating(false));
+            }}
+            disabled={updating}
+            className="btn-secondary"
+          >
+            {ALT_NEXT_STATUS[order.status]?.label}
           </button>
         )}
 
@@ -310,14 +343,55 @@ export default function OrderDetailPage() {
           )}
         </div>
 
-        {/* Delivery */}
+        {/* Fulfillment Details */}
         <div className="card p-5">
           <h2 className="font-display font-semibold text-[var(--text-primary)] mb-3 flex items-center gap-2">
-            <MapPin className="w-4 h-4" /> Delivery
+            <MapPin className="w-4 h-4" />
+            {order.fulfillmentType === 'PICKUP'  ? 'Pickup' :
+             order.fulfillmentType === 'DINE_IN' ? 'Dine-In' :
+             order.fulfillmentType === 'QUOTE'   ? 'Quote Request' :
+             order.fulfillmentType === 'BOOKING' ? 'Booking' :
+             'Delivery'}
           </h2>
-          <p className="text-sm text-[var(--text-secondary)]">
-            {order.deliveryAddress ?? 'No delivery address provided'}
-          </p>
+          <dl className="space-y-2 text-sm">
+            {order.deliveryAddress && (
+              <div>
+                <dt className="text-xs font-medium text-[var(--text-muted)] mb-0.5">Address</dt>
+                <dd className="text-[var(--text-secondary)]">{order.deliveryAddress}</dd>
+              </div>
+            )}
+            {order.tableNumber && (
+              <div>
+                <dt className="text-xs font-medium text-[var(--text-muted)] mb-0.5">Table</dt>
+                <dd className="text-[var(--text-secondary)]">Table {order.tableNumber}</dd>
+              </div>
+            )}
+            {order.scheduledFor && (
+              <div>
+                <dt className="text-xs font-medium text-[var(--text-muted)] mb-0.5">
+                  {order.fulfillmentType === 'BOOKING' ? 'Appointment' : 'Scheduled for'}
+                </dt>
+                <dd className="text-[var(--text-secondary)]">
+                  {new Date(order.scheduledFor).toLocaleString('en-ZM', {
+                    dateStyle: 'medium', timeStyle: 'short',
+                  })}
+                </dd>
+              </div>
+            )}
+            {order.estimatedReadyAt && (
+              <div>
+                <dt className="text-xs font-medium text-[var(--text-muted)] mb-0.5">Estimated ready</dt>
+                <dd className="text-[var(--text-secondary)]">
+                  {new Date(order.estimatedReadyAt).toLocaleString('en-ZM', {
+                    dateStyle: 'medium', timeStyle: 'short',
+                  })}
+                </dd>
+              </div>
+            )}
+            {!order.deliveryAddress && !order.tableNumber && !order.scheduledFor && (
+              <dd className="text-[var(--text-muted)]">No additional details</dd>
+            )}
+          </dl>
           {order.notes && (
             <div className="mt-3 pt-3 border-t border-[var(--border)]">
               <p className="text-xs font-medium text-[var(--text-muted)] mb-1">Customer notes</p>

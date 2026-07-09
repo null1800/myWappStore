@@ -5,6 +5,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { InventoryService } from '../products/inventory.service';
 import { CustomersService } from '../customers/customers.service';
 import { WhatsAppService } from './whatsapp.service';
+import { PlanEnforcementService } from '../billing/plan-enforcement.service';
 
 const mockTenant = {
   id: 'tenant-uuid',
@@ -26,11 +27,13 @@ const mockProduct = {
 const mockPrisma = {
   tenant: { findUnique: jest.fn() },
   product: { findMany: jest.fn() },
+  productVariant: { findMany: jest.fn().mockResolvedValue([]) },
   order: {
     create: jest.fn(),
     findMany: jest.fn(),
     findFirst: jest.fn(),
     update: jest.fn(),
+    updateMany: jest.fn(),
     count: jest.fn(),
     aggregate: jest.fn(),
   },
@@ -57,6 +60,10 @@ describe('OrdersService', () => {
         { provide: InventoryService, useValue: mockInventory },
         { provide: CustomersService, useValue: mockCustomers },
         { provide: WhatsAppService, useValue: mockWhatsApp },
+        {
+          provide: PlanEnforcementService,
+          useValue: { assertCanPlaceOrder: jest.fn().mockResolvedValue(undefined) },
+        },
       ],
     }).compile();
 
@@ -74,9 +81,9 @@ describe('OrdersService', () => {
       customerWhatsapp: '+260966000002',
     };
 
-    it('should throw NotFoundException for unknown store slug', async () => {
+    it('should throw BadRequestException for unknown or inactive store slug', async () => {
       mockPrisma.tenant.findUnique.mockResolvedValue(null);
-      await expect(service.create(dto)).rejects.toThrow(NotFoundException);
+      await expect(service.create(dto)).rejects.toThrow(BadRequestException);
     });
 
     it('should throw BadRequestException if store has no WhatsApp number', async () => {
@@ -103,7 +110,6 @@ describe('OrdersService', () => {
     it('should create order and return WhatsApp URL on success', async () => {
       mockPrisma.tenant.findUnique.mockResolvedValue(mockTenant);
       mockPrisma.product.findMany.mockResolvedValue([mockProduct]);
-      mockPrisma.order.count.mockResolvedValue(0); // for order number generation
 
       const mockOrder = {
         id: 'order-uuid',
@@ -122,10 +128,19 @@ describe('OrdersService', () => {
       };
 
       mockPrisma.$transaction.mockImplementation(async (fn: Function) => fn({
+        tenant: { update: jest.fn().mockResolvedValue({ orderSequence: 1 }) },
         customer: { findFirst: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({ id: 'cust-uuid', fullName: 'John Banda' }), update: jest.fn() },
         order: { create: jest.fn().mockResolvedValue(mockOrder) },
         inventoryLog: { create: jest.fn() },
-        product: { update: jest.fn() },
+        product: {
+          findFirst: jest.fn().mockResolvedValue({
+            trackInventory: true,
+            name: 'iPhone 15 Case',
+            allowBackorder: false,
+          }),
+          update: jest.fn(),
+          updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+        },
       }));
 
       mockCustomers.findOrCreate.mockResolvedValue({ id: 'cust-uuid' });
@@ -142,22 +157,31 @@ describe('OrdersService', () => {
 
   describe('updateStatus', () => {
     it('should update status when transition is valid', async () => {
-      mockPrisma.order.findFirst.mockResolvedValue({
-        id: 'order-uuid',
-        status: 'PENDING',
-        orderNumber: 'ORD-00001',
-      });
-      mockPrisma.order.update.mockResolvedValue({
-        id: 'order-uuid',
-        orderNumber: 'ORD-00001',
-        status: 'CONFIRMED',
-      });
+      mockPrisma.order.findFirst
+        .mockResolvedValueOnce({
+          id: 'order-uuid',
+          status: 'PENDING',
+          orderNumber: 'ORD-00001',
+        })
+        .mockResolvedValueOnce({
+          id: 'order-uuid',
+          orderNumber: 'ORD-00001',
+          status: 'CONFIRMED',
+          merchantNotes: null,
+          updatedAt: new Date(),
+        });
+      mockPrisma.order.updateMany.mockResolvedValue({ count: 1 });
 
       const result = await service.updateStatus('tenant-uuid', 'order-uuid', {
         status: 'CONFIRMED' as any,
       });
 
-      expect(result.status).toBe('CONFIRMED');
+      expect(result!.status).toBe('CONFIRMED');
+      expect(mockPrisma.order.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'order-uuid', tenantId: 'tenant-uuid' },
+        }),
+      );
     });
 
     it('should throw BadRequestException for invalid transition', async () => {

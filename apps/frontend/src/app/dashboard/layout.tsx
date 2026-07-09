@@ -7,16 +7,23 @@ import { DashboardSidebar } from '@/components/dashboard/DashboardSidebar';
 import { Spinner } from '@/components/ui/Spinner';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const { accessToken } = useAuthStore();
+  const { user, accessToken, hasHydrated } = useAuthStore();
   const router = useRouter();
 
+  // accessToken lives in memory only and is empty on every fresh page load —
+  // AuthBootstrap (mounted at the app root) attempts a silent refresh using
+  // the HttpOnly cookie. We wait for that to resolve one way or the other
+  // instead of redirecting the instant accessToken is null, which would
+  // bounce an already-logged-in user back to /login on every reload.
+  const stillResolvingSession = hasHydrated && !!user && !accessToken;
+
   useEffect(() => {
-    if (!accessToken) {
+    if (hasHydrated && !user) {
       router.replace('/login');
     }
-  }, [accessToken, router]);
+  }, [hasHydrated, user, router]);
 
-  if (!accessToken) {
+  if (!hasHydrated || stillResolvingSession || !accessToken) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <Spinner size="lg" className="text-[var(--brand)]" />
