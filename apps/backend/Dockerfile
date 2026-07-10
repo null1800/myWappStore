@@ -34,7 +34,7 @@ RUN npm install
 
 # Now bring in the real source and build
 COPY --from=pruner /app/out/full/ .
-RUN npx prisma generate
+RUN cd apps/backend && npx prisma generate
 RUN npx turbo run build --filter=@my-wapp-store/backend
 
 # ── 3. Minimal runtime image ───────────────────────────────────────────────
