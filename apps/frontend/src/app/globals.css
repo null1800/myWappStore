@@ -288,3 +288,81 @@ body {
 .animate-pulse {
   animation: pulse 1.8s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
+
+/* ── Storefront polish ───────────────────────────────────────────────────── */
+.bg-storefront {
+  background:
+    radial-gradient(circle at top left, rgba(15, 110, 86, 0.10), transparent 28rem),
+    linear-gradient(180deg, #ffffff 0%, var(--background) 34rem);
+}
+
+.storefront-grid {
+  background-image:
+    linear-gradient(rgba(15, 23, 42, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(15, 23, 42, 0.05) 1px, transparent 1px);
+  background-size: 42px 42px;
+}
+
+.storefront-chip {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  border: 1px solid var(--border);
+  background: var(--surface-1);
+  padding: 0.625rem 1rem;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  font-weight: 700;
+  transition: all 0.2s ease;
+}
+
+.storefront-chip:hover {
+  border-color: var(--brand);
+  color: var(--brand);
+}
+
+.storefront-chip-active {
+  border-color: var(--brand);
+  background: var(--brand);
+  color: #ffffff;
+  box-shadow: 0 10px 20px -12px var(--brand);
+}
+
+.storefront-chip-active:hover {
+  color: #ffffff;
+}
+
+.storefront-tech {
+  --brand: #aee85b;
+  --brand-hover: #bef264;
+  --brand-light: rgba(174, 232, 91, 0.12);
+  --background: #111112;
+  --surface-1: #1f1f21;
+  --surface-2: #18181a;
+  --surface-3: #262629;
+  --border: rgba(190, 242, 100, 0.18);
+  --text-primary: #f4f4f5;
+  --text-secondary: #a1a1aa;
+  --text-muted: #71717a;
+  background:
+    radial-gradient(circle at top right, rgba(174, 232, 91, 0.10), transparent 26rem),
+    linear-gradient(180deg, #111112 0%, #151516 42rem, #0a0a0b 100%);
+}
+
+.storefront-tech .btn-primary,
+.storefront-tech .btn-whatsapp {
+  border-radius: 0.375rem;
+  background: #aee85b;
+  color: #050505;
+  font-family: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.storefront-tech .btn-primary:hover,
+.storefront-tech .btn-whatsapp:hover {
+  background: #bef264;
+}

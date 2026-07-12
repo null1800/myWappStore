@@ -3,13 +3,24 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Plus, X, Upload } from 'lucide-react';
+import { ArrowLeft, Plus, X, Upload, Sparkles, Eye } from 'lucide-react';
 import { api } from '@/lib/api';
 import { generateSlug } from '@/lib/utils';
 import { Spinner } from '@/components/ui/Spinner';
 import { toast } from 'sonner';
 
 interface Category { id: string; name: string; }
+
+function getErrorMessage(error: unknown, fallback: string) {
+  if (typeof error === 'object' && error !== null && 'response' in error) {
+    const response = (error as { response?: { data?: { error?: { message?: unknown } } } }).response;
+    const message = response?.data?.error?.message;
+    if (typeof message === 'string') return message;
+  }
+  return fallback;
+}
+
+const merchandisingTags = ['new-arrival', 'best-seller', 'featured', 'limited-drop'];
 
 export default function NewProductPage() {
   const router = useRouter();
@@ -34,16 +45,11 @@ export default function NewProductPage() {
   });
 
   const [tagInput, setTagInput] = useState('');
+  const [imageInput, setImageInput] = useState('');
 
   useEffect(() => {
     api.get('/categories').then(({ data }) => setCategories(data.data)).catch(() => {});
   }, []);
-
-  useEffect(() => {
-    if (!slugEdited && form.name) {
-      setForm((f) => ({ ...f, slug: generateSlug(f.name) }));
-    }
-  }, [form.name, slugEdited]);
 
   const addTag = () => {
     const tag = tagInput.trim().toLowerCase();
@@ -76,20 +82,25 @@ export default function NewProductPage() {
       const { data } = await api.post('/products', payload);
       toast.success(`Product ${publishNow ? 'published' : 'saved as draft'}!`);
       router.push(`/dashboard/products/${data.data.id}`);
-    } catch (err: any) {
-      toast.error(err?.response?.data?.error?.message ?? 'Failed to create product');
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err, 'Failed to create product'));
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="max-w-2xl animate-fade-up">
+    <div className="grid max-w-6xl gap-6 animate-fade-up lg:grid-cols-[1fr_22rem]">
+      <section>
       <Link href="/dashboard/products" className="btn-ghost -ml-2 mb-4 inline-flex">
         <ArrowLeft className="w-4 h-4" /> Back to products
       </Link>
 
-      <h1 className="text-2xl font-display font-bold text-[var(--text-primary)] mb-6">Add Product</h1>
+      <div className="mb-6">
+        <p className="text-xs font-bold uppercase tracking-[0.2em] text-[var(--brand)]">Storefront merchandising</p>
+        <h1 className="mt-2 text-3xl font-display font-bold text-[var(--text-primary)]">Add Product</h1>
+        <p className="mt-1 text-sm text-[var(--text-secondary)]">Create the product data once, then tune the presentation fields customers see on the storefront.</p>
+      </div>
 
       <form onSubmit={(e) => handleSubmit(e, false)} className="space-y-5">
 
@@ -103,7 +114,7 @@ export default function NewProductPage() {
               className="input"
               placeholder="iPhone 15 Case"
               value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              onChange={(e) => { const name = e.target.value; setForm({ ...form, name, slug: slugEdited ? form.slug : generateSlug(name) }); }}
               required
             />
           </div>
@@ -179,7 +190,7 @@ export default function NewProductPage() {
                 value={form.compareAtPrice}
                 onChange={(e) => setForm({ ...form, compareAtPrice: e.target.value })}
               />
-              <p className="text-xs text-[var(--text-muted)] mt-1">Shows as crossed-out "was" price</p>
+              <p className="text-xs text-[var(--text-muted)] mt-1">Shows as crossed-out was price</p>
             </div>
           </div>
         </div>
@@ -234,7 +245,25 @@ export default function NewProductPage() {
 
         {/* Tags */}
         <div className="card p-5 space-y-3">
-          <h2 className="font-semibold text-[var(--text-primary)]">Tags</h2>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h2 className="font-semibold text-[var(--text-primary)]">Storefront Tags & Badges</h2>
+              <p className="mt-1 text-xs text-[var(--text-muted)]">Use tags like new-arrival, best-seller, or featured to support future badges, filters, and campaign sections without backend changes.</p>
+            </div>
+            <Sparkles className="h-5 w-5 text-[var(--brand)]" />
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {merchandisingTags.map((tag) => (
+              <button
+                key={tag}
+                type="button"
+                onClick={() => setForm((f) => f.tags.includes(tag) ? f : { ...f, tags: [...f.tags, tag] })}
+                className={`badge ${form.tags.includes(tag) ? 'badge-green' : 'badge-gray'} text-xs`}
+              >
+                {tag}
+              </button>
+            ))}
+          </div>
           <div className="flex gap-2">
             <input
               className="input flex-1"
@@ -269,28 +298,39 @@ export default function NewProductPage() {
         <div className="card p-5 space-y-3">
           <h2 className="font-semibold text-[var(--text-primary)]">Images</h2>
           <p className="text-sm text-[var(--text-secondary)]">
-            Upload images to Supabase Storage and paste the URLs here. Direct upload UI coming in Phase 2.
+            Add multiple product image URLs. The first image becomes the storefront hero/card image; the rest appear as the product gallery.
           </p>
           <div className="flex gap-2">
             <input
               className="input flex-1"
               placeholder="https://xxx.supabase.co/storage/v1/object/public/..."
+              value={imageInput}
+              onChange={(e) => setImageInput(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
                   e.preventDefault();
-                  const url = (e.target as HTMLInputElement).value.trim();
+                  const url = imageInput.trim();
                   if (url) {
                     setForm((f) => ({ ...f, images: [...f.images, url] }));
-                    (e.target as HTMLInputElement).value = '';
+                    setImageInput('');
                   }
                 }
               }}
             />
-            <button type="button" className="btn-secondary shrink-0">
+            <button type="button" onClick={() => { const url = imageInput.trim(); if (url) { setForm((f) => ({ ...f, images: [...f.images, url] })); setImageInput(''); } }} className="btn-secondary shrink-0">
               <Upload className="w-4 h-4" />
             </button>
           </div>
           {form.images.length > 0 && (
+            <>
+            <div className="grid grid-cols-3 gap-2">
+              {form.images.map((url, i) => (
+                <div key={`${url}-${i}`} className="relative aspect-square overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface-2)]">
+                  <img src={url} alt={`Product preview ${i + 1}`} className="h-full w-full object-cover" />
+                  {i === 0 && <span className="absolute left-2 top-2 rounded-full bg-[var(--brand)] px-2 py-0.5 text-[10px] font-bold text-white">Hero</span>}
+                </div>
+              ))}
+            </div>
             <ul className="space-y-1.5">
               {form.images.map((url, i) => (
                 <li key={i} className="flex items-center gap-2 text-xs text-[var(--text-secondary)] bg-[var(--surface-2)] px-3 py-2 rounded-lg">
@@ -305,6 +345,7 @@ export default function NewProductPage() {
                 </li>
               ))}
             </ul>
+            </>
           )}
         </div>
 
@@ -320,13 +361,27 @@ export default function NewProductPage() {
           <button
             type="button"
             disabled={isLoading}
-            onClick={(e) => handleSubmit(e as any, true)}
+            onClick={(e) => handleSubmit(e, true)}
             className="btn-primary"
           >
             {isLoading ? <Spinner size="sm" /> : 'Publish Product'}
           </button>
         </div>
       </form>
+      </section>
+      <aside className="lg:sticky lg:top-6 lg:self-start">
+        <div className="card overflow-hidden p-0">
+          <div className="aspect-[4/3] bg-[var(--surface-3)]">
+            {form.images[0] ? <img src={form.images[0]} alt="Product preview" className="h-full w-full object-cover" /> : <div className="flex h-full items-center justify-center text-5xl">📦</div>}
+          </div>
+          <div className="p-5">
+            <div className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-[var(--brand)]"><Eye className="h-4 w-4" /> Storefront preview</div>
+            <h2 className="text-xl font-black text-[var(--text-primary)]">{form.name || 'Product name'}</h2>
+            <p className="mt-2 line-clamp-3 text-sm text-[var(--text-secondary)]">{form.description || 'Product description will appear here.'}</p>
+            <p className="mt-4 text-2xl font-black text-[var(--brand)]">{form.price ? `ZMW ${Number(form.price).toFixed(2)}` : 'ZMW 0.00'}</p>
+          </div>
+        </div>
+      </aside>
     </div>
   );
 }
