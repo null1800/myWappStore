@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import Image from 'next/image';
 import { create } from 'zustand';
 import { X, ShoppingBag, ArrowRight, MessageSquare, MapPin, User, Phone, Mail, CreditCard } from 'lucide-react';
 import { useCartStore } from '@/store/cart.store';
@@ -8,6 +9,15 @@ import { publicApi } from '@/lib/api';
 import { formatCurrency } from '@/lib/utils';
 import { Spinner } from '@/components/ui/Spinner';
 import { toast } from 'sonner';
+
+function getErrorMessage(error: unknown, fallback: string) {
+  if (typeof error === 'object' && error !== null && 'response' in error) {
+    const response = (error as { response?: { data?: { error?: { message?: unknown } } } }).response;
+    const message = response?.data?.error?.message;
+    if (typeof message === 'string') return message;
+  }
+  return fallback;
+}
 
 interface CartDrawerState {
   isOpen: boolean;
@@ -85,8 +95,8 @@ export function CartDrawer({ storeSlug }: CartDrawerProps) {
       if (data.data?.whatsappUrl) {
         window.location.href = data.data.whatsappUrl;
       }
-    } catch (err: any) {
-      toast.error(err?.response?.data?.error?.message ?? 'Failed to place order. Please try again.');
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err, 'Failed to place order. Please try again.'));
     } finally {
       setLoading(false);
     }
@@ -135,7 +145,7 @@ export function CartDrawer({ storeSlug }: CartDrawerProps) {
                   <div key={item.productId} className="flex gap-4 p-3 rounded-xl border border-[var(--border)] bg-[var(--surface-2)]">
                     <div className="w-16 h-16 rounded-lg bg-[var(--surface-3)] overflow-hidden shrink-0 flex items-center justify-center text-2xl relative">
                       {item.image ? (
-                        <img src={item.image} alt={item.name} className="object-cover w-full h-full" />
+                        <Image src={item.image} alt={item.name} fill className="object-cover" sizes="64px" />
                       ) : (
                         '📦'
                       )}

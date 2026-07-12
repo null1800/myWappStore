@@ -1,11 +1,27 @@
 import { notFound } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, ShieldCheck, Truck, Star, MessageCircle, RotateCcw } from 'lucide-react';
 import { publicApi } from '@/lib/api';
 import { formatCurrency } from '@/lib/utils';
 import { AddToCartButton } from '@/components/storefront/AddToCartButton';
 import { CartDrawer } from '@/components/storefront/CartDrawer';
+import { StorefrontCartButton } from '@/components/storefront/StorefrontCartButton';
+
+interface ProductDetail {
+  id: string;
+  name: string;
+  slug: string;
+  description?: string | null;
+  price: string;
+  compareAtPrice: string | null;
+  images?: string[];
+  stockQuantity: number;
+  trackInventory: boolean;
+  allowBackorder: boolean;
+  category?: { id: string; name: string } | null;
+  tags?: string[];
+}
 
 async function getProduct(storeSlug: string, productSlug: string) {
   try {
@@ -13,7 +29,8 @@ async function getProduct(storeSlug: string, productSlug: string) {
     const { data } = await publicApi.get(`/stores/${storeSlug}/products`, {
       params: { limit: 100 },
     });
-    const product = data.data.find((p: any) => p.slug === productSlug);
+    const products = data.data as ProductDetail[];
+    const product = products.find((p) => p.slug === productSlug);
     return product ?? null;
   } catch {
     return null;
@@ -34,129 +51,135 @@ export default async function ProductDetailPage({
     product.trackInventory && !product.allowBackorder && product.stockQuantity === 0;
 
   return (
-    <div className="container-page py-8">
-      <Link
-        href={`/${storeSlug}`}
-        className="inline-flex items-center gap-1.5 text-sm text-[var(--text-secondary)] hover:text-[var(--brand)] mb-6 transition-colors"
-      >
-        <ArrowLeft className="w-4 h-4" />
-        Back to store
-      </Link>
+    <div className="min-h-screen bg-storefront">
+      <div className="sticky top-0 z-20 border-b border-[var(--border)] bg-white/90 backdrop-blur-xl">
+        <div className="container-page flex items-center justify-between py-3">
+          <Link
+            href={`/${storeSlug}`}
+            className="inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm font-semibold text-[var(--text-secondary)] transition hover:bg-[var(--surface-2)] hover:text-[var(--brand)]"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back to store
+          </Link>
+          <StorefrontCartButton />
+        </div>
+      </div>
 
-      <div className="grid md:grid-cols-2 gap-8 lg:gap-12">
-        {/* Images */}
-        <div>
-          <div className="relative aspect-square rounded-2xl overflow-hidden bg-[var(--surface-3)]">
-            {product.images?.[0] ? (
-              <Image
-                src={product.images[0]}
-                alt={product.name}
-                fill
-                className="object-cover"
-                sizes="(max-width: 768px) 100vw, 50vw"
-                priority
-              />
-            ) : (
-              <div className="absolute inset-0 flex items-center justify-center text-6xl">📦</div>
-            )}
-            {isOutOfStock && (
-              <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
-                <span className="bg-black/70 text-white px-4 py-2 rounded-full font-medium">
-                  Out of Stock
-                </span>
+      <main className="container-page py-8 sm:py-12">
+        <div className="grid gap-8 lg:grid-cols-[1.05fr_0.95fr] lg:gap-14">
+          <div>
+            <div className="relative aspect-square overflow-hidden rounded-[2rem] border border-white bg-white shadow-2xl shadow-slate-900/10">
+              {product.images?.[0] ? (
+                <Image
+                  src={product.images[0]}
+                  alt={product.name}
+                  fill
+                  className="object-cover"
+                  sizes="(max-width: 1024px) 100vw, 50vw"
+                  priority
+                />
+              ) : (
+                <div className="absolute inset-0 flex items-center justify-center bg-[var(--surface-3)] text-7xl">📦</div>
+              )}
+              {isOutOfStock && (
+                <div className="absolute inset-0 flex items-center justify-center bg-black/40">
+                  <span className="rounded-full bg-black/75 px-5 py-2 text-sm font-bold text-white">Out of stock</span>
+                </div>
+              )}
+            </div>
+
+            {(product.images?.length ?? 0) > 1 && (
+              <div className="mt-4 flex gap-3 overflow-x-auto pb-1">
+                {(product.images ?? []).slice(0, 6).map((img: string, i: number) => (
+                  <div key={i} className="h-20 w-20 shrink-0 overflow-hidden rounded-2xl border border-[var(--border)] bg-white shadow-sm">
+                    <Image src={img} alt={`${product.name} ${i + 1}`} width={80} height={80} className="h-full w-full object-cover" />
+                  </div>
+                ))}
               </div>
             )}
           </div>
 
-          {/* Thumbnail row for multiple images */}
-          {product.images?.length > 1 && (
-            <div className="flex gap-2 mt-3 overflow-x-auto pb-1">
-              {product.images.slice(0, 6).map((img: string, i: number) => (
-                <div key={i} className="w-16 h-16 rounded-lg overflow-hidden bg-[var(--surface-3)] shrink-0">
-                  <Image src={img} alt={`${product.name} ${i + 1}`} width={64} height={64} className="object-cover w-full h-full" />
+          <div className="lg:sticky lg:top-24 lg:self-start">
+            <div className="rounded-[2rem] border border-[var(--border)] bg-white p-6 shadow-xl shadow-slate-900/5 sm:p-8">
+              {product.category && (
+                <Link href={`/${storeSlug}?category=${product.category.id}`} className="mb-4 inline-flex rounded-full bg-[var(--brand-light)] px-3 py-1 text-xs font-black uppercase tracking-[0.18em] text-[var(--brand)] hover:underline">
+                  {product.category.name}
+                </Link>
+              )}
+
+              <h1 className="text-3xl font-black leading-tight tracking-tight text-[var(--text-primary)] sm:text-4xl">
+                {product.name}
+              </h1>
+
+              <div className="mt-4 flex items-center gap-2 text-amber-500">
+                {Array.from({ length: 5 }).map((_, i) => <Star key={i} className="h-4 w-4 fill-current" />)}
+                <span className="ml-2 text-sm font-semibold text-[var(--text-secondary)]">Trusted customer favorite</span>
+              </div>
+
+              <div className="mt-6 flex flex-wrap items-center gap-3 border-y border-[var(--border)] py-5">
+                <span className="text-4xl font-black text-[var(--text-primary)]">{formatCurrency(product.price)}</span>
+                {product.compareAtPrice && <span className="text-xl text-[var(--text-muted)] line-through">{formatCurrency(product.compareAtPrice)}</span>}
+                {product.compareAtPrice && <span className="badge badge-red text-xs">{Math.round((1 - parseFloat(product.price) / parseFloat(product.compareAtPrice)) * 100)}% off</span>}
+              </div>
+
+              {product.trackInventory && (
+                <p className={`mt-5 inline-flex rounded-full px-3 py-1 text-sm font-bold ${
+                  product.stockQuantity === 0 ? 'bg-red-50 text-red-600' :
+                  product.stockQuantity <= 5 ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'
+                }`}>
+                  {product.stockQuantity === 0 ? 'Out of stock' : product.stockQuantity <= 5 ? `Only ${product.stockQuantity} left in stock` : 'In stock and ready to order'}
+                </p>
+              )}
+
+              {product.description && <p className="mt-6 text-base leading-8 text-[var(--text-secondary)]">{product.description}</p>}
+
+              {(product.tags?.length ?? 0) > 0 && (
+                <div className="mt-6 flex flex-wrap gap-2">
+                  {(product.tags ?? []).map((tag: string) => <span key={tag} className="badge badge-gray text-xs">{tag}</span>)}
                 </div>
-              ))}
+              )}
+
+              <div className="mt-8">
+                <AddToCartButton
+                  product={{
+                    productId: product.id,
+                    name: product.name,
+                    price: product.price,
+                    image: product.images?.[0] ?? null,
+                    maxStock: product.stockQuantity,
+                    allowBackorder: product.allowBackorder,
+                  }}
+                  storeSlug={storeSlug}
+                  isOutOfStock={isOutOfStock}
+                />
+              </div>
+
+              <div className="mt-8 grid gap-3 sm:grid-cols-3">
+                {[
+                  [ShieldCheck, 'Secure order'],
+                  [Truck, 'Delivery details'],
+                  [MessageCircle, 'WhatsApp support'],
+                ].map(([Icon, label]) => (
+                  <div key={String(label)} className="rounded-2xl bg-[var(--surface-2)] p-3 text-center">
+                    <Icon className="mx-auto h-5 w-5 text-[var(--brand)]" />
+                    <p className="mt-2 text-xs font-bold text-[var(--text-secondary)]">{String(label)}</p>
+                  </div>
+                ))}
+              </div>
             </div>
-          )}
-        </div>
 
-        {/* Info */}
-        <div className="flex flex-col">
-          {product.category && (
-            <Link
-              href={`/${storeSlug}?category=${product.category.id}`}
-              className="text-xs font-medium text-[var(--brand)] uppercase tracking-widest mb-3 hover:underline w-fit"
-            >
-              {product.category.name}
-            </Link>
-          )}
-
-          <h1 className="text-3xl font-display font-bold text-[var(--text-primary)] leading-tight mb-4">
-            {product.name}
-          </h1>
-
-          {/* Price */}
-          <div className="flex items-baseline gap-3 mb-6">
-            <span className="text-3xl font-bold text-[var(--text-primary)]">
-              {formatCurrency(product.price)}
-            </span>
-            {product.compareAtPrice && (
-              <span className="text-lg text-[var(--text-muted)] line-through">
-                {formatCurrency(product.compareAtPrice)}
-              </span>
-            )}
-            {product.compareAtPrice && (
-              <span className="badge badge-red text-xs">
-                {Math.round((1 - parseFloat(product.price) / parseFloat(product.compareAtPrice)) * 100)}% off
-              </span>
-            )}
+            <div className="mt-5 rounded-[1.5rem] border border-[var(--border)] bg-white p-5 shadow-sm">
+              <div className="flex items-start gap-3">
+                <RotateCcw className="mt-0.5 h-5 w-5 text-[var(--brand)]" />
+                <div>
+                  <p className="text-sm font-bold text-[var(--text-primary)]">Order with clarity</p>
+                  <p className="mt-1 text-sm leading-6 text-[var(--text-secondary)]">Review your cart, contact information, delivery address, and payment preference before sending the order.</p>
+                </div>
+              </div>
+            </div>
           </div>
-
-          {/* Stock indicator */}
-          {product.trackInventory && (
-            <p className={`text-sm font-medium mb-5 ${
-              product.stockQuantity === 0 ? 'text-red-500' :
-              product.stockQuantity <= 5 ? 'text-amber-600' : 'text-emerald-600'
-            }`}>
-              {product.stockQuantity === 0
-                ? 'Out of stock'
-                : product.stockQuantity <= 5
-                  ? `Only ${product.stockQuantity} left in stock`
-                  : 'In stock'}
-            </p>
-          )}
-
-          {/* Description */}
-          {product.description && (
-            <p className="text-[var(--text-secondary)] leading-relaxed mb-6">
-              {product.description}
-            </p>
-          )}
-
-          {/* Tags */}
-          {product.tags?.length > 0 && (
-            <div className="flex flex-wrap gap-2 mb-6">
-              {product.tags.map((tag: string) => (
-                <span key={tag} className="badge badge-gray text-xs">{tag}</span>
-              ))}
-            </div>
-          )}
-
-          {/* Add to cart — client component */}
-          <AddToCartButton
-            product={{
-              productId: product.id,
-              name: product.name,
-              price: product.price,
-              image: product.images?.[0] ?? null,
-              maxStock: product.stockQuantity,
-              allowBackorder: product.allowBackorder,
-            }}
-            storeSlug={storeSlug}
-            isOutOfStock={isOutOfStock}
-          />
         </div>
-      </div>
+      </main>
 
       <CartDrawer storeSlug={storeSlug} />
     </div>

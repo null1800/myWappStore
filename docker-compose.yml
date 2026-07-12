@@ -17,7 +17,10 @@ services:
       context: .
       dockerfile: apps/backend/Dockerfile
     env_file:
-      - apps/backend/.env
+      # Optional so CI can validate compose syntax without local secrets.
+      # Copy apps/backend/.env.example to apps/backend/.env for real deployments.
+      - path: apps/backend/.env
+        required: false
     environment:
       NODE_ENV: production
       PORT: 3001
