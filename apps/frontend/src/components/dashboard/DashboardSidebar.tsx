@@ -15,6 +15,7 @@ import {
   BarChart2,
   UserCog,
   CreditCard,
+  FolderOpen,
 } from 'lucide-react';
 import { useState } from 'react';
 import { useAuthStore } from '@/store/auth.store';

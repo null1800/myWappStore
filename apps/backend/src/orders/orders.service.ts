@@ -4,6 +4,7 @@ import {
   BadRequestException,
   Logger,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { InventoryService } from '../products/inventory.service';
 import { CustomersService } from '../customers/customers.service';
@@ -101,15 +102,15 @@ export class OrdersService {
 
     // Verify all requested products exist and are active in this store
     if (products.length !== productIds.length) {
-      const foundIds = products.map((p) => p.id);
+      const foundIds = products.map((p: any) => p.id);
       const missing = productIds.filter((id) => !foundIds.includes(id));
       throw new BadRequestException(
         `One or more products are unavailable: ${missing.join(', ')}`,
       );
     }
 
-    const productMap = new Map(products.map((p) => [p.id, p]));
-    const variantMap = new Map(variants.map((v) => [v.id, v]));
+    const productMap = new Map<string, any>(products.map((p: any) => [p.id, p]));
+    const variantMap = new Map<string, any>(variants.map((v: any) => [v.id, v]));
 
     // 3. Validate stock availability upfront
     for (const item of dto.items) {
@@ -166,7 +167,7 @@ export class OrdersService {
     const total = subtotal; // discounts in Phase 2
 
     // 5. Execute everything in a single transaction
-    const order = await this.prisma.$transaction(async (tx) => {
+    const order = await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       // Atomically increment the tenant's order counter and derive the order
       // number from the returned value. This UPDATE takes a row lock on the
       // tenant row, so concurrent checkouts for the same store serialize
@@ -282,7 +283,7 @@ export class OrdersService {
       merchantPhone: tenant.phoneWhatsapp,
       storeName: tenant.name,
       orderNumber: order.orderNumber,
-      items: order.items.map((item) => ({
+      items: order.items.map((item: any) => ({
         name: item.variantName ? `${item.productName} (${item.variantName})` : item.productName,
         quantity: item.quantity,
         unitPrice: item.unitPrice.toString(),
@@ -533,7 +534,7 @@ export class OrdersService {
       merchantPhone: tenant.phoneWhatsapp,
       storeName: tenant.name,
       orderNumber: order.orderNumber,
-      items: order.items.map((i) => ({
+      items: order.items.map((i: any) => ({
         name: i.productName,
         quantity: i.quantity,
         unitPrice: i.unitPrice.toString(),

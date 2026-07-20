@@ -13,7 +13,7 @@
     "test": "turbo run test",
     "test:e2e": "turbo run test:e2e",
     "format": "turbo run format",
-    "supabase:link": "supabase link --project-ref qqdnbyrrakfgvskhwega",
+    "supabase:link": "supabase link --project-ref imhrolccmnlxorzltrdr",
     "supabase:check": "npm run supabase:check -w @my-wapp-store/backend"
   },
   "devDependencies": {

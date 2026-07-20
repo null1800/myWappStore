@@ -53,10 +53,46 @@ export class UpdateStoreDto {
   isPublic?: boolean;
 
   @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
+
+  @IsOptional()
   @IsIn(BUSINESS_TYPES, {
     message: `businessType must be one of: ${BUSINESS_TYPES.join(', ')}`,
   })
   businessType?: BusinessType;
+
+  @IsOptional()
+  @IsString()
+  theme?: string;
+
+  @IsOptional()
+  @IsString()
+  headline?: string;
+
+  @IsOptional()
+  @IsString()
+  subtitle?: string;
+
+  @IsOptional()
+  @IsString()
+  aboutText?: string;
+
+  @IsOptional()
+  @IsString()
+  address?: string;
+
+  @IsOptional()
+  @IsString()
+  contactEmail?: string;
+
+  @IsOptional()
+  @IsString()
+  facebookUrl?: string;
+
+  @IsOptional()
+  @IsString()
+  instagramUrl?: string;
 }
 
 // ─── Update Slug ──────────────────────────────────────────────────────────────

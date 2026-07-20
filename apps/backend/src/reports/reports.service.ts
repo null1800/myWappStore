@@ -71,7 +71,7 @@ export class ReportsService {
       totalRevenue: agg._sum?.total?.toString() ?? '0',
       totalOrders: typeof agg._count === 'object' && agg._count ? (agg._count as any).id ?? 0 : 0,
       avgOrderValue: agg._avg?.total?.toString() ?? '0',
-      daily: daily.map((r) => ({
+      daily: daily.map((r: any) => ({
         date: r.date,
         revenue: r.revenue,
         orders: Number(r.orders),
@@ -114,7 +114,7 @@ export class ReportsService {
           LIMIT ${limit}
         `;
 
-    return rows.map((r) => ({
+    return rows.map((r: any) => ({
       productId: r.product_id,
       productName: r.product_name,
       unitsSold: Number(r.qty),
@@ -188,7 +188,7 @@ export class ReportsService {
       period,
       totalCustomers,
       repeatCustomers: Number(repeatRows[0]?.count ?? 0),
-      topCustomers: topCustomers.map((r) => ({
+      topCustomers: topCustomers.map((r: any) => ({
         customerId: r.customer_id,
         fullName: r.full_name,
         whatsappNumber: r.whatsapp_number,
@@ -213,7 +213,7 @@ export class ReportsService {
       _sum: { total: true },
     });
 
-    return grouped.map((g) => ({
+    return grouped.map((g: any) => ({
       status: g.status,
       count: g._count.id,
       total: g._sum.total?.toString() ?? '0',

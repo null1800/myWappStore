@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { Prisma } from '@prisma/client';
+import { PrismaClientKnownRequestError, PrismaClientValidationError } from '@prisma/client/runtime/library';
 
 // Prisma error codes we handle explicitly.
 // Full list: https://www.prisma.io/docs/reference/api-reference/error-reference
@@ -46,7 +47,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
 
       code = this.httpStatusToCode(status);
 
-    } else if (exception instanceof Prisma.PrismaClientKnownRequestError) {
+    } else if (exception instanceof PrismaClientKnownRequestError) {
       // ── Prisma known errors — map to HTTP without leaking query details ─────
       // Never log the full Prisma error in production (it contains table/column
       // names and query fragments). Log the code and a safe reference only.
@@ -79,7 +80,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
           break;
       }
 
-    } else if (exception instanceof Prisma.PrismaClientValidationError) {
+    } else if (exception instanceof PrismaClientValidationError) {
       // ── Prisma validation error (wrong types etc.) ───────────────────────────
       // These should be caught by class-validator before reaching Prisma.
       // If they reach here it's a programming error — log it.

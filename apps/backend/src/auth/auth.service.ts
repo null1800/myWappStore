@@ -10,6 +10,7 @@ import { randomUUID } from 'node:crypto';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { createClient } from '@supabase/supabase-js';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   RegisterDto,
@@ -86,7 +87,7 @@ export class AuthService {
       await this.supabaseAdmin.auth.admin.createUser({
         email: dto.email,
         password: dto.password,
-        email_confirm: false, // require verification — see resend-verification flow below
+        email_confirm: true, // auto-confirm so users can log in immediately; verification email is still sent for informational purposes
       });
 
     if (authError || !authData.user) {
@@ -101,7 +102,7 @@ export class AuthService {
     try {
       // 4. Create Tenant + User in a Prisma transaction
       // If either fails, both are rolled back. Then we clean up Supabase Auth.
-      const { tenant, user } = await this.prisma.$transaction(async (tx) => {
+      const { tenant, user } = await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
         const tenant = await tx.tenant.create({
           data: {
             slug: dto.storeSlug,

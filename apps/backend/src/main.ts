@@ -1,8 +1,8 @@
 import { NestFactory } from '@nestjs/core';
-import { ValidationPipe, VersioningType, Logger } from '@nestjs/common';
+import { ValidationPipe, VersioningType, Logger, BadRequestException } from '@nestjs/common';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
-import { json } from 'express';
+import { json, urlencoded } from 'express';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
@@ -86,13 +86,31 @@ async function bootstrap() {
     }),
   );
 
+  // ── JSON body parser ────────────────────────────────────────────────────────
+  // When rawBody:true is set on NestFactory.create, NestJS uses express.raw()
+  // to capture the raw buffer — this does NOT parse JSON into req.body.
+  // We must explicitly register express.json() for all non-webhook routes.
+  app.use(
+    (req: any, _res: any, next: any) => {
+      // Skip for the webhook which needs its own verify-capable parser below
+      if (req.path?.startsWith('/api/v1/billing/webhook')) return next();
+      json({ limit: '10mb' })(req, _res, next);
+    },
+  );
+  app.use(
+    (req: any, _res: any, next: any) => {
+      if (req.path?.startsWith('/api/v1/billing/webhook')) return next();
+      urlencoded({ extended: true })(req, _res, next);
+    },
+  );
+
   // ── Raw body preservation for Paystack webhook ─────────────────────────────
-  // Applied before the default JSON parser so the raw bytes are captured first.
-  // The webhook controller reads req.rawBody for HMAC verification.
+  // Applied to webhook path only; rawBody is read by the billing controller
+  // for HMAC signature verification.
   app.use(
     '/api/v1/billing/webhook',
     json({
-      type: 'application/json', // only accept JSON content-type on this path
+      type: 'application/json',
       verify: (req: any, _res, buf) => {
         req.rawBody = buf;
       },
@@ -142,6 +160,11 @@ async function bootstrap() {
       transform: true,
       stopAtFirstError: true,
       transformOptions: { enableImplicitConversion: true },
+      exceptionFactory: (errors) => {
+        console.error('[ValidationPipe] errors:', JSON.stringify(errors.map(e => ({ property: e.property, value: e.value, constraints: e.constraints })), null, 2));
+        const msg = Object.values(errors[0]?.constraints ?? {})[0] ?? 'Validation failed';
+        return new BadRequestException(msg);
+      },
     }),
   );
 

@@ -333,3 +333,148 @@ body {
 .storefront-chip-active:hover {
   color: #ffffff;
 }
+
+/* ── ARTECH Light Theme Tokens (scoped to storefront wrapper) ─────────────────
+   These mirror the Tailwind color config from the reference Artech-tech HTML.
+   They are only applied inside .artech-storefront so they never affect
+   the dashboard, auth, or other pages.
+──────────────────────────────────────────────────────────────────────────── */
+.artech-storefront {
+  /* Fonts */
+  --artech-font-display: 'Hanken Grotesk', 'Inter', system-ui, sans-serif;
+  --artech-font-body: 'Inter', system-ui, sans-serif;
+  --artech-font-mono: 'JetBrains Mono', monospace;
+
+  /* Surfaces */
+  --artech-background:          #ffffff;
+  --artech-surface:             #ffffff;
+  --artech-surface-deep:        #f8fafc;
+  --artech-surface-raised:      #f1f5f9;
+  --artech-surface-overlay:     #ffffff;
+  --artech-surface-container:   #f8fafc;
+  --artech-surface-container-low:    #f1f5f9;
+  --artech-surface-container-high:   #e2e8f0;
+  --artech-surface-container-highest: #cbd5e1;
+  --artech-surface-bright:      #ffffff;
+  --artech-surface-dim:         #f8fafc;
+
+  /* Primary (lime-green accent) */
+  --artech-primary:             #0f6e56;
+  --artech-primary-container:   #e6f4f1;
+  --artech-primary-fixed:       #0f6e56;
+  --artech-primary-fixed-dim:   #0b523f;
+  --artech-on-primary:          #ffffff;
+  --artech-on-primary-container: #0f6e56;
+  --artech-inverse-primary:     #e6f4f1;
+
+  /* Secondary (blue) */
+  --artech-secondary:           #0066cc;
+  --artech-secondary-container: #dbeafe;
+  --artech-on-secondary:        #ffffff;
+  --artech-accent-electric:     #0066CC;
+
+  /* On-surface text */
+  --artech-on-surface:          #0f172a;
+  --artech-on-surface-variant:  #475569;
+  --artech-text-primary:        #0f172a;
+  --artech-text-secondary:      #64748b;
+
+  /* Borders */
+  --artech-outline:             #94a3b8;
+  --artech-outline-variant:     #e2e8f0;
+
+  /* Error */
+  --artech-error:               #ef4444;
+}
+
+/* ── ARTECH Glassmorphism Utilities ────────────────────────────────────────── */
+.artech-glass {
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+.artech-glass-light {
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+/* ── ARTECH Scrollbar ───────────────────────────────────────────────────────── */
+.artech-storefront ::-webkit-scrollbar { width: 6px; height: 6px; }
+.artech-storefront ::-webkit-scrollbar-track { background: #f1f5f9; }
+.artech-storefront ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+.artech-storefront ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+/* ── ARTECH Micro-Animations ───────────────────────────────────────────────── */
+@keyframes artechGlowPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(15, 110, 86, 0); }
+  50%       { box-shadow: 0 0 24px 4px rgba(15, 110, 86, 0.15); }
+}
+
+@keyframes artechSlideDown {
+  from { opacity: 0; transform: translateY(-8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes artechFadeUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes artechSpin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+.artech-animate-slide-down { animation: artechSlideDown 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+.artech-animate-fade-up    { animation: artechFadeUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+.artech-glow-pulse         { animation: artechGlowPulse 3s ease-in-out infinite; }
+
+/* ── ARTECH Storefront Grid Background ─────────────────────────────────────── */
+.artech-grid-bg {
+  background-image:
+    linear-gradient(rgba(15, 110, 86, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(15, 110, 86, 0.03) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+
+/* ── ARTECH Selection ────────────────────────────────────────────────────────── */
+.artech-storefront ::selection {
+  background: #0f6e56;
+  color: #ffffff;
+}
+
+/* ── ARTECH Category / Filter Chips ────────────────────────────────────────── */
+.artech-chip {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  padding: 0.375rem 0.875rem;
+  border-radius: 9999px;
+  border: 1px solid var(--artech-outline-variant);
+  background: var(--artech-surface-container-low);
+  color: var(--artech-on-surface-variant);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  transition: all 0.15s ease;
+  cursor: pointer;
+  white-space: nowrap;
+  font-family: var(--artech-font-mono);
+}
+
+.artech-chip:hover {
+  border-color: var(--artech-primary);
+  color: var(--artech-primary);
+}
+
+.artech-chip-active {
+  border-color: var(--artech-primary);
+  background: var(--artech-primary);
+  color: var(--artech-on-primary);
+  box-shadow: 0 4px 16px -4px rgba(15, 110, 86, 0.4);
+}
+
+.artech-chip-active:hover {
+  color: var(--artech-on-primary);
+}
+

@@ -4,6 +4,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { Prisma } from '@prisma/client';
 
 export interface DeductStockOptions {
   productId: string;
@@ -12,7 +13,7 @@ export interface DeductStockOptions {
   quantity: number;
   orderId: string;          // reference for audit log
   allowBackorder: boolean;
-  tx?: any;                 // optional Prisma transaction context
+  tx?: Prisma.TransactionClient;                 // optional Prisma transaction context
 }
 
 @Injectable()
@@ -30,7 +31,7 @@ export class InventoryService {
     note: string | undefined,
     userId: string,
   ) {
-    return this.prisma.$transaction(async (tx) => {
+    return this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       // Get current stock
       const product = await tx.product.findFirst({
         where: { id: productId, tenantId },

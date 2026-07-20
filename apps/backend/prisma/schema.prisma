@@ -23,6 +23,14 @@ model Tenant {
   bannerUrl      String?  @map("banner_url")
   primaryColor   String   @default("#0F6E56") @map("primary_color")
   description    String?
+  theme          String   @default("CLASSIC")
+  headline       String?
+  subtitle       String?
+  aboutText      String?  @map("about_text")
+  address        String?
+  contactEmail   String?  @map("contact_email")
+  facebookUrl    String?  @map("facebook_url")
+  instagramUrl   String?  @map("instagram_url")
   isActive       Boolean  @default(true) @map("is_active")
   isPublic       Boolean  @default(true) @map("is_public") // marketplace visibility
   plan           String   @default("free") // free | starter | pro
@@ -169,6 +177,10 @@ model Product {
   status           ProductStatus @default(ACTIVE)
   images           String[]      // array of Supabase Storage URLs
   tags             String[]
+  // Structured product attributes — colors, sizes, spice levels, portion sizes, etc.
+  // Stored as flexible JSON to support different business types without schema changes.
+  // Shape: { colors?: [{name, hex}], sizes?: string[], [group: string]: string[] }
+  attributes       Json?         // e.g. {"colors":[{"name":"Red","hex":"#ef4444"}],"sizes":["S","M","L"]}
   weightGrams      Int?          @map("weight_grams")
   metaTitle        String?       @map("meta_title")
   metaDescription  String?       @map("meta_description")

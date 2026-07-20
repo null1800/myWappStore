@@ -7,6 +7,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { EmailService } from './email.service';
 import { PlanEnforcementService } from '../billing/plan-enforcement.service';
@@ -185,7 +186,7 @@ export class StaffService {
     }
 
     // Create the Prisma user and mark the invitation accepted — transactional
-    const user = await this.prisma.$transaction(async (tx) => {
+    const user = await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       const newUser = await tx.user.create({
         data: {
           authId: authData.user.id,
@@ -229,7 +230,7 @@ export class StaffService {
     if (target.role === 'OWNER') throw new ForbiddenException('Cannot deactivate the store owner.');
     if (!target.isActive) throw new ConflictException('This account is already deactivated.');
 
-    await this.prisma.$transaction(async (tx) => {
+    await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       await tx.user.update({ where: { id: targetUserId }, data: { isActive: false } });
       // Immediately revoke all active sessions so they're logged out everywhere
       await tx.refreshToken.updateMany({

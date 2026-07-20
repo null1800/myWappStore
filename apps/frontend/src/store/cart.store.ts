@@ -10,12 +10,14 @@ export interface CartItem {
   allowBackorder: boolean;
   quantity: number;
   storeSlug: string;
+  selectedColor?: { name: string; hex: string };
 }
 
 interface CartState {
   items: CartItem[];
   addItem: (item: Omit<CartItem, 'quantity' | 'storeSlug'>, storeSlug: string) => void;
   updateQty: (productId: string, quantity: number) => void;
+  updateColor: (productId: string, color: { name: string; hex: string } | undefined) => void;
   removeItem: (productId: string) => void;
   getItem: (productId: string) => CartItem | undefined;
   clearCart: () => void;
@@ -31,7 +33,11 @@ export const useCartStore = create<CartState>()(
         const hasOtherStoreItems = items.some((i) => i.storeSlug !== storeSlug);
         const currentItems = hasOtherStoreItems ? [] : items;
 
-        const existingItem = currentItems.find((i) => i.productId === item.productId);
+        // Check for existing item with same productId AND selectedColor
+        const existingItem = currentItems.find((i) => 
+          i.productId === item.productId && 
+          JSON.stringify(i.selectedColor) === JSON.stringify(item.selectedColor)
+        );
         if (existingItem) {
           const newQty = existingItem.quantity + 1;
           // Check stock limit if trackInventory is enabled and backorders are not allowed
@@ -40,7 +46,7 @@ export const useCartStore = create<CartState>()(
           }
           set({
             items: currentItems.map((i) =>
-              i.productId === item.productId
+              i.productId === item.productId && JSON.stringify(i.selectedColor) === JSON.stringify(item.selectedColor)
                 ? { ...i, quantity: newQty }
                 : i
             ),
@@ -63,6 +69,13 @@ export const useCartStore = create<CartState>()(
         set({
           items: get().items.map((i) =>
             i.productId === productId ? { ...i, quantity } : i
+          ),
+        });
+      },
+      updateColor: (productId, color) => {
+        set({
+          items: get().items.map((i) =>
+            i.productId === productId ? { ...i, selectedColor: color } : i
           ),
         });
       },
