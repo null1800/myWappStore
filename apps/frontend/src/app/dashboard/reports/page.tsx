@@ -85,9 +85,9 @@ export default function ReportsPage() {
       {/* Header */}
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-2xl font-bold text-[var(--text-primary)]">Reports</h1>
+          <h1 className="text-2xl font-bold text-[var(--text-primary)]">Sales Reports & Analytics</h1>
           <p className="text-sm text-[var(--text-secondary)] mt-0.5">
-            Sales performance and business insights.
+            Track your earnings, top-selling products, and store performance.
           </p>
         </div>
         <div className="flex rounded-xl overflow-hidden border border-[var(--border)] shrink-0">
@@ -117,7 +117,7 @@ export default function ReportsPage() {
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {[
               {
-                label: 'Total Revenue',
+                label: 'Total Money Made',
                 value: formatCurrency(sales?.totalRevenue ?? '0'),
                 icon: TrendingUp,
                 color: 'text-emerald-600',
@@ -131,7 +131,7 @@ export default function ReportsPage() {
                 bg: 'bg-blue-50',
               },
               {
-                label: 'Avg Order Value',
+                label: 'Average Customer Spend',
                 value: formatCurrency(sales?.avgOrderValue ?? '0'),
                 icon: TrendingUp,
                 color: 'text-purple-600',

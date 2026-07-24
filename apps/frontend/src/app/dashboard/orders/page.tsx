@@ -23,12 +23,12 @@ interface Order {
 
 const STATUS_OPTIONS = [
   { value: '', label: 'All orders' },
-  { value: 'PENDING',    label: 'Pending' },
-  { value: 'CONFIRMED',  label: 'Confirmed' },
-  { value: 'PACKED',     label: 'Packed' },
-  { value: 'READY',      label: 'Ready' },
-  { value: 'DISPATCHED', label: 'Dispatched' },
-  { value: 'DELIVERED',  label: 'Delivered' },
+  { value: 'PENDING',    label: 'Waiting for Confirmation' },
+  { value: 'CONFIRMED',  label: 'Accepted & Confirmed' },
+  { value: 'PACKED',     label: 'Packed & Ready' },
+  { value: 'READY',      label: 'Ready for Pickup' },
+  { value: 'DISPATCHED', label: 'On the Way' },
+  { value: 'DELIVERED',  label: 'Delivered Successfully' },
   { value: 'QUOTE_SENT', label: 'Quote Sent' },
   { value: 'BOOKED',     label: 'Booked' },
   { value: 'CANCELLED',  label: 'Cancelled' },

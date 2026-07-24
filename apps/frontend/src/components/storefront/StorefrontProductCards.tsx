@@ -23,15 +23,23 @@ function BusinessTypeBadges({ businessType, attributes }: { businessType: string
 }
 
 function ProductAttributeDisplay({ attributes, businessType, selectedColor, onColorSelect }: { attributes: ProductAttributes; businessType: string; selectedColor?: { name: string; hex: string }; onColorSelect: (color: { name: string; hex: string }) => void }) {
-  if (!attributes.colors.length && !attributes.sizes.length && !attributes.customAttributes.length) return null;
+  if (!attributes.colors.length && !attributes.sizes.length && !attributes.customAttributes.length && !Object.keys(attributes.dynamicFields || {}).length) return null;
+
+  // Show sizes for all business types — the fix for the "Display Extra Information" bug
   const sizeLabel = businessType === 'RESTAURANT' ? 'Portions:' : 'Sizes:';
-  const showSizes = attributes.sizes.length > 0 && (businessType === 'RESTAURANT' || ['RETAIL', 'CLOTHING', 'SHOES'].includes(businessType));
+  const showSizes = attributes.sizes.length > 0;
+
+  // Show relevant dynamic fields as info pills (e.g. brand, model, warranty, ingredients)
+  const dynamicEntries = Object.entries(attributes.dynamicFields || {}).filter(([, v]) => !!v).slice(0, 3);
+
   return <div className="mt-3 space-y-2">
     {attributes.colors.length > 0 && <div className="flex items-center gap-2"><span className="text-[10px] text-slate-500 uppercase tracking-wider">Colors:</span><div className="flex gap-1">{attributes.colors.slice(0, 5).map((color) => <button key={color.name} onClick={() => onColorSelect(color)} className={`w-5 h-5 rounded-full border-2 shadow-sm hover:scale-110 transition-transform ${selectedColor?.name === color.name ? 'border-slate-900 ring-2 ring-slate-300' : 'border-white'}`} style={{ backgroundColor: color.hex }} title={color.name} />)}{attributes.colors.length > 5 && <span className="text-[10px] text-slate-400">+{attributes.colors.length - 5}</span>}</div></div>}
-    {showSizes && <div className="flex items-center gap-2"><span className="text-[10px] text-slate-500 uppercase tracking-wider">{sizeLabel}</span><div className="flex gap-1 flex-wrap">{attributes.sizes.slice(0, businessType === 'RESTAURANT' ? undefined : 4).map((size) => <span key={size} className="text-[10px] bg-slate-100 px-2 py-0.5 rounded border border-slate-200">{size}</span>)}</div></div>}
-    {attributes.customAttributes.length > 0 && <div className="flex flex-wrap gap-1">{attributes.customAttributes.slice(0, 3).map((attribute) => <span key={attribute.name} className="text-[10px] rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-slate-600">{attribute.name}: {attribute.values[0]}</span>)}</div>}
+    {showSizes && <div className="flex items-center gap-2"><span className="text-[10px] text-slate-500 uppercase tracking-wider">{sizeLabel}</span><div className="flex gap-1 flex-wrap">{attributes.sizes.slice(0, 4).map((size) => <span key={size} className="text-[10px] bg-slate-100 px-2 py-0.5 rounded border border-slate-200">{size}</span>)}{attributes.sizes.length > 4 && <span className="text-[10px] text-slate-400">+{attributes.sizes.length - 4}</span>}</div></div>}
+    {dynamicEntries.length > 0 && <div className="flex flex-wrap gap-1">{dynamicEntries.map(([key, value]) => <span key={key} className="text-[10px] rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-slate-600 capitalize">{key}: {value}</span>)}</div>}
+    {attributes.customAttributes.length > 0 && <div className="flex flex-wrap gap-1">{attributes.customAttributes.slice(0, 2).map((attribute) => <span key={attribute.name} className="text-[10px] rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-slate-600">{attribute.name}: {attribute.values[0]}</span>)}</div>}
   </div>;
 }
+
 
 export function ProductCardStandard({ product, storeSlug, store, mounted, wishlist, toggleWishlist, addItem, updateQty, getItem }: ProductCardProps) {
   const attributes = parseProductAttributes(product.tags);

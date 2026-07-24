@@ -28,6 +28,8 @@ const PUBLIC_STORE_SELECT = {
   contactEmail: true,
   facebookUrl: true,
   instagramUrl: true,
+  businessType: true,
+  enabledModules: true,
   createdAt: true,
 } as const;
 
@@ -54,6 +56,8 @@ const MERCHANT_STORE_SELECT = {
   instagramUrl: true,
   plan: true,
   businessType: true,
+  businessTypeUpdatedAt: true,
+  enabledModules: true,
   createdAt: true,
   updatedAt: true,
 } as const;
@@ -85,32 +89,109 @@ export class StoresService {
   // ── PATCH /stores/me ───────────────────────────────────────────────────────
   // Updates store settings — only fields provided in the body
   async updateMyStore(tenantId: string, dto: UpdateStoreDto) {
+    const currentStore = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { businessType: true, businessTypeUpdatedAt: true, enabledModules: true },
+    });
+
+    if (!currentStore) {
+      throw new NotFoundException('Store not found.');
+    }
+
+    const dataToUpdate: any = {
+      ...(dto.name !== undefined && { name: dto.name }),
+      ...(dto.description !== undefined && { description: dto.description }),
+      ...(dto.phoneWhatsapp !== undefined && { phoneWhatsapp: dto.phoneWhatsapp }),
+      ...(dto.primaryColor !== undefined && { primaryColor: dto.primaryColor }),
+      ...(dto.isPublic !== undefined && { isPublic: dto.isPublic }),
+      ...(dto.isActive !== undefined && { isActive: dto.isActive }),
+      ...(dto.theme !== undefined && { theme: dto.theme }),
+      ...(dto.headline !== undefined && { headline: dto.headline }),
+      ...(dto.subtitle !== undefined && { subtitle: dto.subtitle }),
+      ...(dto.aboutText !== undefined && { aboutText: dto.aboutText }),
+      ...(dto.address !== undefined && { address: dto.address }),
+      ...(dto.contactEmail !== undefined && { contactEmail: dto.contactEmail }),
+      ...(dto.facebookUrl !== undefined && { facebookUrl: dto.facebookUrl }),
+      ...(dto.instagramUrl !== undefined && { instagramUrl: dto.instagramUrl }),
+      ...(dto.enabledModules !== undefined && { enabledModules: dto.enabledModules }),
+    };
+
+    if (dto.businessType !== undefined && dto.businessType !== currentStore.businessType) {
+      if (currentStore.businessTypeUpdatedAt) {
+        const diffMs = Date.now() - new Date(currentStore.businessTypeUpdatedAt).getTime();
+        const diffDays = diffMs / (1000 * 60 * 60 * 24);
+        if (diffDays < 30) {
+          const remainingDays = Math.ceil(30 - diffDays);
+          throw new ConflictException(
+            `Primary Business Type is locked and cannot be changed for another ${remainingDays} days.`
+          );
+        }
+      }
+      dataToUpdate.businessType = dto.businessType;
+      dataToUpdate.businessTypeUpdatedAt = new Date();
+    }
+
     const tenant = await this.prisma.tenant.update({
       where: { id: tenantId },
-      data: {
-        ...(dto.name !== undefined && { name: dto.name }),
-        ...(dto.description !== undefined && { description: dto.description }),
-        ...(dto.phoneWhatsapp !== undefined && { phoneWhatsapp: dto.phoneWhatsapp }),
-        ...(dto.primaryColor !== undefined && { primaryColor: dto.primaryColor }),
-        ...(dto.isPublic !== undefined && { isPublic: dto.isPublic }),
-        ...(dto.isActive !== undefined && { isActive: dto.isActive }),
-        ...(dto.businessType !== undefined && { businessType: dto.businessType }),
-        ...(dto.theme !== undefined && { theme: dto.theme }),
-        ...(dto.headline !== undefined && { headline: dto.headline }),
-        ...(dto.subtitle !== undefined && { subtitle: dto.subtitle }),
-        ...(dto.aboutText !== undefined && { aboutText: dto.aboutText }),
-        ...(dto.address !== undefined && { address: dto.address }),
-        ...(dto.contactEmail !== undefined && { contactEmail: dto.contactEmail }),
-        ...(dto.facebookUrl !== undefined && { facebookUrl: dto.facebookUrl }),
-        ...(dto.instagramUrl !== undefined && { instagramUrl: dto.instagramUrl }),
-      },
+      data: dataToUpdate,
       select: MERCHANT_STORE_SELECT,
     });
+
+    if (dto.businessType !== undefined || dto.enabledModules !== undefined) {
+      await this.autoConfigureCategories(tenantId, tenant.businessType, tenant.enabledModules);
+    }
 
     // Invalidate public storefront cache so changes are visible immediately
     this.cache.invalidate(`store:${tenant.slug}`);
     this.logger.log(`Store updated: ${tenantId}`);
     return tenant;
+  }
+
+  private async autoConfigureCategories(tenantId: string, businessType: string, enabledModules: string[] = []) {
+    const modulesToCheck = [businessType, ...enabledModules];
+    const defaultCategoriesMap: Record<string, string[]> = {
+      RESTAURANT: ['Beverages', 'Main Dishes', 'Sides & Desserts'],
+      CLOTHING: ['Men\'s Fashion', 'Women\'s Fashion', 'Accessories'],
+      RETAIL: ['Best Sellers', 'New Arrivals'],
+      GROCERY: ['Fresh Produce', 'Pantry', 'Beverages & Snacks'],
+      PHARMACY: ['Over-The-Counter', 'Personal Care', 'Vitamins & Supplements'],
+      ELECTRONICS: ['Smartphones & Accessories', 'Computers & Laptops', 'Audio & Gadgets'],
+      SERVICE: ['Consultation', 'Standard Service', 'Express Service'],
+    };
+
+    const categoriesToCreate: string[] = [];
+    for (const mod of modulesToCheck) {
+      const cats = defaultCategoriesMap[mod.toUpperCase()];
+      if (cats) {
+        categoriesToCreate.push(...cats);
+      }
+    }
+
+    // Filter duplicates
+    const uniqueCats = Array.from(new Set(categoriesToCreate));
+
+    if (uniqueCats.length === 0) return;
+
+    // Fetch existing categories to avoid duplicates
+    const existing = await this.prisma.category.findMany({
+      where: { tenantId },
+      select: { name: true },
+    });
+    const existingNames = new Set(existing.map(c => c.name.toLowerCase()));
+
+    const toInsert = uniqueCats.filter(name => !existingNames.has(name.toLowerCase()));
+
+    for (const catName of toInsert) {
+      const slug = catName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+      await this.prisma.category.create({
+        data: {
+          tenantId,
+          name: catName,
+          slug,
+          isActive: true,
+        }
+      }).catch(err => this.logger.error(`Failed to auto-create category ${catName}: ${err.message}`));
+    }
   }
 
   // ── PATCH /stores/me/slug ──────────────────────────────────────────────────

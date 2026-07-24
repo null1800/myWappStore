@@ -39,6 +39,8 @@ model Tenant {
   // unlock type-appropriate features (e.g. RESTAURANT gets kitchen status
   // display, SERVICE gets quote/booking order types).
   businessType   String   @default("GENERAL") @map("business_type")
+  businessTypeUpdatedAt DateTime? @map("business_type_updated_at")
+  enabledModules        String[]  @default([]) @map("enabled_modules")
   // Per-tenant order counter — incremented atomically (single UPDATE) when an
   // order is created. This replaces a SELECT count()+1 approach, which raced
   // under concurrent checkout and could issue duplicate order numbers.

@@ -92,21 +92,21 @@ export default function StaffPage() {
   };
 
   const roleBadge = (role: string) => (
-    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+    <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${
       role === 'OWNER'
         ? 'bg-purple-100 text-purple-700'
         : 'bg-blue-100 text-blue-700'
     }`}>
-      {role}
+      {role === 'OWNER' ? 'Shop Owner' : 'Shop Assistant'}
     </span>
   );
 
   return (
     <div className="space-y-6 animate-fade-up">
       <div>
-        <h1 className="text-2xl font-bold text-[var(--text-primary)]">Staff Management</h1>
+        <h1 className="text-2xl font-bold text-[var(--text-primary)]">Helper Accounts & Team</h1>
         <p className="text-sm text-[var(--text-secondary)] mt-0.5">
-          Invite team members and manage their access.
+          Add team members or assistants to help you manage orders and products.
         </p>
       </div>
 
@@ -114,20 +114,20 @@ export default function StaffPage() {
       <div className="card p-5">
         <h2 className="font-semibold text-[var(--text-primary)] mb-3 flex items-center gap-2">
           <UserPlus className="w-4 h-4 text-[var(--brand)]" />
-          Invite a Staff Member
+          Invite a Shop Assistant
         </h2>
         <form onSubmit={sendInvite} className="flex gap-3">
           <input
             type="email"
             className="input flex-1"
-            placeholder="email@example.com"
+            placeholder="assistant@example.com"
             required
             value={inviteEmail}
             onChange={(e) => setInviteEmail(e.target.value)}
           />
           <button type="submit" disabled={inviting} className="btn-primary px-5 py-2 flex items-center gap-2 shrink-0">
             {inviting ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
-            Send Invite
+            Send Invitation
           </button>
         </form>
       </div>

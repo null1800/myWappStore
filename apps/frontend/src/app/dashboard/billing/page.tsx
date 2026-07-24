@@ -114,9 +114,9 @@ export default function BillingPage() {
   return (
     <div className="space-y-8 animate-fade-up">
       <div>
-        <h1 className="text-2xl font-bold text-[var(--text-primary)]">Billing & Plan</h1>
+        <h1 className="text-2xl font-bold text-[var(--text-primary)]">Store Plan & Subscription</h1>
         <p className="text-sm text-[var(--text-secondary)] mt-0.5">
-          Manage your subscription and view payment history.
+          View your active plan, upgrade features, or check past payment receipts.
         </p>
       </div>
 

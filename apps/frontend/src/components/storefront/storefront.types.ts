@@ -46,6 +46,7 @@ export interface ProductAttributes {
   colors: Array<{ name: string; hex: string }>;
   sizes: string[];
   customAttributes: Array<{ name: string; values: string[] }>;
+  dynamicFields?: Record<string, string>;
 }
 
 export interface CartItemInput {

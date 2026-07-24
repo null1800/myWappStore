@@ -35,12 +35,12 @@ const ALT_NEXT_STATUS: Record<string, { status: string; label: string } | undefi
 };
 
 const NEXT_STATUS_LABEL: Record<string, string> = {
-  CONFIRMED:  'Mark as Confirmed',
-  PACKED:     'Mark as Packed',
-  READY:      'Ready for Collection',
-  DISPATCHED: 'Mark as Dispatched',
-  DELIVERED:  'Mark as Delivered',
-  BOOKED:     'Mark as Booked',
+  CONFIRMED:  'Accept & Confirm Order',
+  PACKED:     'Mark as Packed & Ready',
+  READY:      'Ready for Customer Pickup',
+  DISPATCHED: 'Mark as Out for Delivery',
+  DELIVERED:  'Mark Order as Delivered',
+  BOOKED:     'Confirm Booking',
 };
 
 interface OrderDetail {
@@ -235,16 +235,16 @@ export default function OrderDetailPage() {
           </button>
         )}
 
-        {/* WhatsApp resend */}
+        {/* WhatsApp contact */}
         {whatsappUrl && (
           <a
             href={whatsappUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="btn-secondary"
+            className="btn-secondary border-emerald-200 text-emerald-700 hover:bg-emerald-50"
           >
             <MessageCircle className="w-4 h-4 text-[#25D366]" />
-            Resend via WhatsApp
+            Contact Customer on WhatsApp
           </a>
         )}
 

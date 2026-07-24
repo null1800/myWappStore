@@ -7,6 +7,7 @@ import {
   MinLength,
   Matches,
   IsHexColor,
+  IsArray,
 } from 'class-validator';
 
 // Supported business types — drives workflow labels and available features.
@@ -93,6 +94,11 @@ export class UpdateStoreDto {
   @IsOptional()
   @IsString()
   instagramUrl?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  enabledModules?: string[];
 }
 
 // ─── Update Slug ──────────────────────────────────────────────────────────────

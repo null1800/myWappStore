@@ -59,9 +59,9 @@ export default function DashboardPage() {
 
   const STAT_CARDS = [
     {
-      label: 'Total Revenue',
+      label: 'Total Money Made',
       value: formatCurrency(summary?.totalRevenue ?? '0'),
-      sub: `${formatCurrency(summary?.todayRevenue ?? '0')} today`,
+      sub: `${formatCurrency(summary?.todayRevenue ?? '0')} earned today`,
       icon: TrendingUp,
       color: 'text-emerald-600',
       bg: 'bg-emerald-50',
@@ -69,15 +69,15 @@ export default function DashboardPage() {
     {
       label: 'Total Orders',
       value: summary?.totalOrders ?? 0,
-      sub: `${summary?.todayOrders ?? 0} today`,
+      sub: `${summary?.todayOrders ?? 0} orders today`,
       icon: ShoppingCart,
       color: 'text-blue-600',
       bg: 'bg-blue-50',
     },
     {
-      label: 'Pending Orders',
+      label: 'Waiting for Review',
       value: summary?.pendingOrders ?? 0,
-      sub: 'Awaiting confirmation',
+      sub: 'Needs your confirmation',
       icon: Clock,
       color: 'text-amber-600',
       bg: 'bg-amber-50',
@@ -101,10 +101,10 @@ export default function DashboardPage() {
       {/* Greeting */}
       <div>
         <h1 className="text-2xl font-bold text-[var(--text-primary)]">
-          Good day, {user?.fullName?.split(' ')[0] ?? 'there'} 👋
+          Welcome back, {user?.fullName?.split(' ')[0] ?? 'there'} 👋
         </h1>
         <p className="text-sm text-[var(--text-secondary)] mt-0.5">
-          Here&apos;s what&apos;s happening with <span className="font-medium text-[var(--brand)]">{tenant?.name}</span> today.
+          Here is how your shop <span className="font-medium text-[var(--brand)]">{tenant?.name}</span> is doing today.
         </p>
       </div>
 
@@ -127,10 +127,10 @@ export default function DashboardPage() {
       {/* Quick actions */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
-          { href: '/dashboard/products/new', label: 'Add Product', icon: Package },
+          { href: '/dashboard/products/new', label: 'Add a New Item', icon: Package },
           { href: '/dashboard/orders',       label: 'View Orders', icon: ShoppingCart },
-          { href: '/dashboard/customers',    label: 'Customers',   icon: Users },
-          { href: '/dashboard/store',        label: 'Store Settings', icon: TrendingUp },
+          { href: '/dashboard/customers',    label: 'Customer Directory', icon: Users },
+          { href: '/dashboard/store',        label: 'Edit Shop Settings', icon: TrendingUp },
         ].map(({ href, label, icon: Icon }) => (
           <Link
             key={href}

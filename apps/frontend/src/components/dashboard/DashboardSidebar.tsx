@@ -22,13 +22,13 @@ import { useAuthStore } from '@/store/auth.store';
 import { api } from '@/lib/api';
 
 const NAV_ITEMS = [
-  { href: '/dashboard',           label: 'Overview',  icon: LayoutDashboard, ownerOnly: false },
-  { href: '/dashboard/products',  label: 'Products',  icon: Package,         ownerOnly: false },
-  { href: '/dashboard/orders',    label: 'Orders',    icon: ShoppingCart,    ownerOnly: false },
-  { href: '/dashboard/customers', label: 'Customers', icon: Users,           ownerOnly: false },
-  { href: '/dashboard/reports',   label: 'Reports',   icon: BarChart2,       ownerOnly: true  },
-  { href: '/dashboard/staff',     label: 'Staff',     icon: UserCog,         ownerOnly: true  },
-  { href: '/dashboard/store',     label: 'My Store',  icon: Settings,        ownerOnly: false },
+  { href: '/dashboard',           label: 'Home Dashboard',  icon: LayoutDashboard, ownerOnly: false },
+  { href: '/dashboard/products',  label: 'My Products',     icon: Package,         ownerOnly: false },
+  { href: '/dashboard/orders',    label: 'Customer Orders', icon: ShoppingCart,    ownerOnly: false },
+  { href: '/dashboard/customers', label: 'Customer List',   icon: Users,           ownerOnly: false },
+  { href: '/dashboard/reports',   label: 'Sales Reports',   icon: BarChart2,       ownerOnly: true  },
+  { href: '/dashboard/staff',     label: 'Helper Accounts', icon: UserCog,         ownerOnly: true  },
+  { href: '/dashboard/store',     label: 'Store settings',  icon: Settings,        ownerOnly: false },
 ];
 
 export function DashboardSidebar() {

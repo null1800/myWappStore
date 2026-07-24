@@ -81,12 +81,12 @@ export function generateSlug(name: string) {
 }
 
 export const ORDER_STATUS_LABELS: Record<string, string> = {
-  PENDING:    'Pending',
-  CONFIRMED:  'Confirmed',
-  PACKED:     'Packed',
-  READY:      'Ready',
-  DISPATCHED: 'Dispatched',
-  DELIVERED:  'Delivered',
+  PENDING:    'Waiting for Confirmation',
+  CONFIRMED:  'Accepted & Confirmed',
+  PACKED:     'Packed & Ready',
+  READY:      'Ready for Pickup',
+  DISPATCHED: 'On the Way (Dispatched)',
+  DELIVERED:  'Delivered Successfully',
   CANCELLED:  'Cancelled',
   REFUNDED:   'Refunded',
   QUOTE_SENT: 'Quote Sent',

@@ -60,12 +60,12 @@ export default function ProductsPage() {
       {/* Header */}
       <div className="flex items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-[var(--text-primary)]">Products</h1>
-          <p className="text-sm text-[var(--text-secondary)] mt-0.5">{loading ? '…' : `${total} total`}</p>
+          <h1 className="text-2xl font-bold text-[var(--text-primary)]">My Products</h1>
+          <p className="text-sm text-[var(--text-secondary)] mt-0.5">{loading ? '…' : `${total} items in total`}</p>
         </div>
         <Link href="/dashboard/products/new" className="btn-primary">
           <Plus className="w-4 h-4" />
-          Add Product
+          Add a New Item
         </Link>
       </div>
 
@@ -75,22 +75,22 @@ export default function ProductsPage() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" aria-hidden="true" />
           <input
             className="input pl-9"
-            placeholder="Search products…"
+            placeholder="Search products by name…"
             aria-label="Search products"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
         <select
-          className="input max-w-[160px]"
-          aria-label="Filter by status"
+          className="input max-w-[180px]"
+          aria-label="Filter by visibility"
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
         >
-          <option value="">All statuses</option>
-          <option value="ACTIVE">Active</option>
-          <option value="DRAFT">Draft</option>
-          <option value="ARCHIVED">Archived</option>
+          <option value="">All items</option>
+          <option value="ACTIVE">Visible to customers</option>
+          <option value="DRAFT">Hidden (Draft)</option>
+          <option value="ARCHIVED">Archived (Deleted)</option>
         </select>
       </div>
 
@@ -164,7 +164,7 @@ export default function ProductsPage() {
                     </td>
                     <td className="px-4 py-3 text-center">
                       <span className={STATUS_BADGE[product.status] ?? 'badge badge-gray'}>
-                        {product.status.charAt(0) + product.status.slice(1).toLowerCase()}
+                        {product.status === 'ACTIVE' ? 'Visible' : product.status === 'DRAFT' ? 'Hidden' : 'Archived'}
                       </span>
                     </td>
                   </tr>

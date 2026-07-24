@@ -76,7 +76,7 @@ export default function CategoriesPage() {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formName.trim() || !formSlug.trim()) {
-      toast.error('Name and slug are required');
+      toast.error('Name and web address link slug are required');
       return;
     }
     setSaving(true);
@@ -90,10 +90,10 @@ export default function CategoriesPage() {
 
       if (isCreating) {
         await api.post('/categories', payload);
-        toast.success('Category created');
+        toast.success('Category created successfully');
       } else if (editingCategory) {
         await api.patch(`/categories/${editingCategory.id}`, payload);
-        toast.success('Category updated');
+        toast.success('Category updated successfully');
       }
 
       setIsCreating(false);
@@ -111,7 +111,7 @@ export default function CategoriesPage() {
     setDeletingId(id);
     try {
       await api.delete(`/categories/${id}`);
-      toast.success('Category deleted');
+      toast.success('Category deleted successfully');
       fetchCategories();
     } catch (err: any) {
       toast.error(err?.response?.data?.error?.message ?? 'Failed to delete category');
@@ -124,13 +124,13 @@ export default function CategoriesPage() {
     <div className="space-y-6 animate-fade-up">
       <div className="flex items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-[var(--text-primary)]">Categories</h1>
-          <p className="text-sm text-[var(--text-secondary)] mt-0.5">Manage your storefront product classification</p>
+          <h1 className="text-2xl font-bold text-[var(--text-primary)]">Product Categories</h1>
+          <p className="text-sm text-[var(--text-secondary)] mt-0.5">Group your items (e.g. "Drinks", "Shirts") so customers can browse easily</p>
         </div>
         {!isCreating && !editingCategory && (
           <button onClick={handleOpenCreate} className="btn-primary flex items-center gap-2">
             <Plus className="w-4 h-4" />
-            Add Category
+            Create a Category
           </button>
         )}
       </div>
@@ -139,7 +139,7 @@ export default function CategoriesPage() {
         <form onSubmit={handleSave} className="card p-5 space-y-4 max-w-xl">
           <div className="flex justify-between items-center pb-2 border-b border-[var(--border)]">
             <h3 className="font-semibold text-[var(--text-primary)]">
-              {isCreating ? 'Create Category' : 'Edit Category'}
+              {isCreating ? 'Create a New Category' : 'Edit Category'}
             </h3>
             <button type="button" onClick={handleCancel} className="text-[var(--text-muted)] hover:text-[var(--text-primary)]">
               <X className="w-4 h-4" />
@@ -158,7 +158,7 @@ export default function CategoriesPage() {
           </div>
 
           <div>
-            <label className="label">Slug URL</label>
+            <label className="label">Web Address (URL Slug)</label>
             <input
               required
               className="input"
@@ -166,6 +166,7 @@ export default function CategoriesPage() {
               value={formSlug}
               onChange={(e) => setFormSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-'))}
             />
+            <p className="text-xs text-[var(--text-muted)] mt-1">This forms part of the website link for this category. Auto-generated from name.</p>
           </div>
 
           <div>
@@ -173,7 +174,7 @@ export default function CategoriesPage() {
             <textarea
               className="input resize-none"
               rows={2}
-              placeholder="Description of the category…"
+              placeholder="Provide a brief description of the items in this category…"
               value={formDesc}
               onChange={(e) => setFormDesc(e.target.value)}
             />
@@ -188,8 +189,8 @@ export default function CategoriesPage() {
                 onChange={(e) => setFormIsActive(e.target.checked)}
               />
               <div>
-                <span className="text-sm font-medium text-[var(--text-primary)]">Active status</span>
-                <p className="text-xs text-[var(--text-muted)]">Show this category on your storefront filter list</p>
+                <span className="text-sm font-medium text-[var(--text-primary)]">Show to Customers</span>
+                <p className="text-xs text-[var(--text-muted)]">Make this category visible on your shop homepage</p>
               </div>
             </label>
           </div>
